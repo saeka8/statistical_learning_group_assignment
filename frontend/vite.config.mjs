@@ -1,5 +1,5 @@
-import { defineConfig } from 'vite';
-import react from '@vitejs/plugin-react';
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
 
 export default defineConfig({
   plugins: [react()],
@@ -10,16 +10,16 @@ export default defineConfig({
       output: {
         manualChunks(id) {
           if (id.includes('three') || id.includes('@react-three')) {
-            return 'three-vendor';
+            return 'three-vendor'
           }
 
           if (id.includes('motion')) {
-            return 'motion-vendor';
+            return 'motion-vendor'
           }
 
-          return undefined;
+          return undefined
         },
       },
     },
   },
-});
+})
