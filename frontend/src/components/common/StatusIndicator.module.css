@@ -1,0 +1,84 @@
+.indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  font-weight: 500;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-full);
+  flex-shrink: 0;
+}
+
+.idle .dot {
+  background: var(--color-text-tertiary);
+}
+
+.idle .label {
+  color: var(--color-text-tertiary);
+}
+
+.uploading .dot {
+  background: var(--color-accent-blue);
+  animation: pulse 1s ease-in-out infinite;
+}
+
+.uploading .label {
+  color: var(--color-accent-blue);
+}
+
+.processing .dot {
+  background: var(--color-accent-amber);
+  animation: pulse 1s ease-in-out infinite;
+}
+
+.processing .label {
+  color: #d97706;
+}
+
+.classified .dot {
+  background: var(--color-accent-indigo);
+}
+
+.classified .label {
+  color: var(--color-accent-indigo);
+}
+
+.extracted .dot {
+  background: var(--color-accent-emerald);
+}
+
+.extracted .label {
+  color: #059669;
+}
+
+.error .dot {
+  background: var(--color-accent-rose);
+}
+
+.error .label {
+  color: #e11d48;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  50% {
+    opacity: 0.5;
+    transform: scale(0.85);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .uploading .dot,
+  .processing .dot {
+    animation: none;
+  }
+}
