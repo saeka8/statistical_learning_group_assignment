@@ -27,3 +27,7 @@ dist/
 Thumbs.db
 
 node_modules/
+
+# Local agent / brainstorming artifacts
+.superpowers/
+docs/superpowers/

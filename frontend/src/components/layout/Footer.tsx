@@ -8,7 +8,14 @@ export function Footer() {
         <div className={styles.inner}>
           <div className={styles.left}>
             <span className={styles.eyebrow}>Academic showcase</span>
-            <h3 className={styles.title}>DocLens</h3>
+            <div className={styles.brandRow}>
+              <img
+                src="/brand/doclens-mark.svg"
+                alt="DocLens brand mark"
+                className={styles.brandMark}
+              />
+              <h3 className={styles.title}>DocLens</h3>
+            </div>
             <p className={styles.description}>
               A cleaner interface for a Statistical Learning and Prediction course project focused
               on document classification and invoice extraction.
