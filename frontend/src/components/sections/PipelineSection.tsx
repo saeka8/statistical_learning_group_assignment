@@ -1,4 +1,5 @@
 import { motion } from 'motion/react';
+import { useState } from 'react';
 import { pipelineSteps } from '../../data/sampleData';
 import { usePrefersReducedMotion } from '../../hooks/usePrefersReducedMotion';
 import { Badge } from '../common/Badge';
@@ -10,6 +11,7 @@ import styles from './PipelineSection.module.css';
 export function PipelineSection() {
   const reducedMotion = usePrefersReducedMotion();
   const summaryPills = ['5 stages', '6 classes', 'Invoice extraction on demand'];
+  const [visibleSteps, setVisibleSteps] = useState<Record<string, boolean>>({});
 
   return (
     <section
@@ -60,10 +62,18 @@ export function PipelineSection() {
               {pipelineSteps.map((step, i) => (
                 <motion.div
                   key={step.id}
+                  data-pipeline-step={step.id}
+                  data-in-view={visibleSteps[step.id] ? 'true' : 'false'}
                   className={`${styles.stepWrapper} ${i % 2 === 0 ? styles.stepLeft : styles.stepRight}`}
                   initial={reducedMotion ? undefined : { opacity: 0, y: 30 }}
                   whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true, margin: '-40px' }}
+                  viewport={{ once: false, margin: '-40px' }}
+                  onViewportEnter={() =>
+                    setVisibleSteps((current) => ({ ...current, [step.id]: true }))
+                  }
+                  onViewportLeave={() =>
+                    setVisibleSteps((current) => ({ ...current, [step.id]: false }))
+                  }
                   transition={{
                     duration: 0.6,
                     delay: reducedMotion ? 0 : i * 0.12,
