@@ -9,12 +9,29 @@ import { SectionReveal } from '../common/SectionReveal';
 import { Container } from '../layout/Container';
 import styles from './ClassificationResults.module.css';
 
+interface AnalyzedDocumentOption {
+  id: string;
+  name: string;
+  classification: ClassificationResult;
+}
+
 interface ClassificationResultsProps {
+  documents: AnalyzedDocumentOption[];
+  activeDocumentId: string | null;
+  activeDocumentName: string;
+  onSetActive: (id: string) => void;
   result: ClassificationResult | null;
   isVisible: boolean;
 }
 
-export function ClassificationResults({ result, isVisible }: ClassificationResultsProps) {
+export function ClassificationResults({
+  documents,
+  activeDocumentId,
+  activeDocumentName,
+  onSetActive,
+  result,
+  isVisible,
+}: ClassificationResultsProps) {
   const reducedMotion = usePrefersReducedMotion();
 
   if (!isVisible || !result) return null;
@@ -24,20 +41,54 @@ export function ClassificationResults({ result, isVisible }: ClassificationResul
       <Container>
         <SectionReveal>
           <div className={styles.header}>
-            <Badge label="Classification Result" variant="accent" size="md" />
+            <Badge label="Classification" variant="accent" size="md" />
             <h2 id="classification-title" className={styles.title}>
-              The model&apos;s final decision
+              Final class decision
             </h2>
             <p className={styles.subtitle}>
-              A primary class is selected, then compared against the closest alternatives so the
-              decision reads clearly during a live demo.
+              The leading prediction stays prominent while nearby alternatives remain visible for
+              context.
             </p>
+            <div
+              className={styles.documentContext}
+              role="status"
+              aria-live="polite"
+              aria-label={`Active document ${activeDocumentName}`}
+            >
+              <span className={styles.documentContextLabel}>Active document</span>
+              <span className={styles.documentContextName}>{activeDocumentName}</span>
+            </div>
           </div>
         </SectionReveal>
 
+        <div className={styles.documentSwitcher}>
+          <span className={styles.documentSwitcherLabel}>Analyzed documents</span>
+          <div className={styles.documentSwitcherList} aria-label="Analyzed documents">
+            {documents.map((document) => {
+              const isActive = document.id === activeDocumentId;
+
+              return (
+                <button
+                  key={document.id}
+                  type="button"
+                  className={`${styles.documentChip} ${isActive ? styles.documentChipActive : ''}`}
+                  onClick={() => onSetActive(document.id)}
+                  aria-pressed={isActive}
+                  aria-label={`Show results for ${document.name}`}
+                >
+                  <span className={styles.documentChipName}>{document.name}</span>
+                  <span className={styles.documentChipMeta}>
+                    {document.classification.predictedLabel}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
         <AnimatePresence mode="wait">
           <motion.div
-            key={result.predictedCategory}
+            key={activeDocumentId ?? result.predictedCategory}
             initial={reducedMotion ? undefined : { opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={reducedMotion ? undefined : { opacity: 0, y: -10 }}
@@ -53,6 +104,7 @@ export function ClassificationResults({ result, isVisible }: ClassificationResul
                     <div>
                       <p className={styles.predictedLabel}>Model decision</p>
                       <h3 className={styles.predictedCategory}>{result.predictedLabel}</h3>
+                      <p className={styles.predictedDocument}>{activeDocumentName}</p>
                     </div>
                   </div>
                   <div className={styles.predictedRight}>

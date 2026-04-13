@@ -31,6 +31,34 @@ const sampleGlyphs = {
   email: 'EML',
 } as const;
 
+const phaseMessages: Record<AnalysisPhase, string> = {
+  idle: 'Ready for a live document run',
+  uploading: 'Uploading documents...',
+  preprocessing: 'Preprocessing and OCR...',
+  extracting_features: 'Extracting features (TF-IDF, layout)...',
+  classifying: 'Running ensemble classifier...',
+  extracting_invoice: 'Extracting invoice fields (NER, regex)...',
+  complete: 'Analysis complete',
+  error: 'Review the document and try again',
+};
+
+const phaseProgress: Record<AnalysisPhase, string> = {
+  idle: '0%',
+  uploading: '20%',
+  preprocessing: '40%',
+  extracting_features: '60%',
+  classifying: '80%',
+  extracting_invoice: '90%',
+  complete: '100%',
+  error: '100%',
+};
+
+const workflowSignals = [
+  { label: 'OCR prep', value: 'Deskew + clean' },
+  { label: 'Label space', value: '6 classes' },
+  { label: 'Invoice route', value: 'NER + regex' },
+];
+
 export function UploadWorkspace({
   documents,
   phase,
@@ -91,19 +119,26 @@ export function UploadWorkspace({
     'classifying',
     'extracting_invoice',
   ].includes(phase);
+  const phaseMessage = phaseMessages[phase];
+  const stagedSummary =
+    documents.length === 0
+      ? 'Load a sample or drop files to begin the demo.'
+      : documents.length === 1
+        ? '1 document is staged for review.'
+        : `${documents.length} documents are staged for review.`;
 
   return (
     <section id="workspace" className="section-padding" aria-labelledby="workspace-title">
       <Container>
         <SectionReveal>
           <div className={styles.header}>
-            <Badge label="Analysis Workspace" variant="accent" size="md" />
+            <Badge label="Workspace" variant="accent" size="md" />
             <h2 id="workspace-title" className={styles.title}>
-              Stage a live document analysis
+              Run the workflow
             </h2>
             <p className={styles.subtitle}>
-              Load a real file or a curated sample, then let the model classify the document and
-              surface invoice entities in a single calm workspace built for presentation.
+              Upload a live document or load a sample to run classification and, when relevant,
+              invoice field recovery in one focused workspace.
             </p>
           </div>
         </SectionReveal>
@@ -175,7 +210,7 @@ export function UploadWorkspace({
                 </div>
 
                 <div className={styles.samples}>
-                  <p className={styles.samplesLabel}>Or load a curated sample set:</p>
+                  <p className={styles.samplesLabel}>Or start with a sample document:</p>
                   <div className={styles.sampleButtons}>
                     {sampleDocuments.map((sample) => (
                       <button
@@ -195,9 +230,9 @@ export function UploadWorkspace({
             </div>
 
             <div className={styles.fileCol}>
-              <Card variant="default" padding="lg">
+              <Card variant="default" padding="lg" className={styles.filePanel}>
                 <div className={styles.fileHeader}>
-                  <h3 className={styles.fileTitle}>Document Queue</h3>
+                  <h3 className={styles.fileTitle}>Queue</h3>
                   {documents.length > 0 && (
                     <Badge
                       label={`${documents.length} file${documents.length > 1 ? 's' : ''}`}
@@ -270,65 +305,71 @@ export function UploadWorkspace({
                   </ul>
                 )}
 
-                <div className={styles.controlBar}>
-                  <Button
-                    variant="primary"
-                    size="md"
-                    onClick={onAnalyze}
-                    disabled={documents.length === 0 || isProcessing}
-                    loading={isProcessing}
-                    icon={
-                      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                        <path
-                          d="M8 1v6l4-2"
-                          stroke="currentColor"
-                          strokeWidth="1.5"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        />
-                        <circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.5" />
-                      </svg>
-                    }
-                  >
-                    {isProcessing ? 'Analyzing...' : 'Analyze All'}
-                  </Button>
-                  {documents.length > 0 && (
-                    <Button variant="ghost" size="md" onClick={onReset} disabled={isProcessing}>
-                      Clear All
+                <div className={styles.filePanelFooter}>
+                  <div className={styles.controlBar}>
+                    <Button
+                      variant="primary"
+                      size="md"
+                      onClick={onAnalyze}
+                      disabled={documents.length === 0 || isProcessing}
+                      loading={isProcessing}
+                      icon={
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                          <path
+                            d="M8 1v6l4-2"
+                            stroke="currentColor"
+                            strokeWidth="1.5"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                          <circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.5" />
+                        </svg>
+                      }
+                    >
+                      {isProcessing ? 'Analyzing...' : 'Analyze All'}
                     </Button>
-                  )}
-                </div>
-
-                {isProcessing && (
-                  <div className={styles.phaseIndicator}>
-                    <div className={styles.phaseBar}>
-                      <div
-                        className={styles.phaseFill}
-                        style={{
-                          width:
-                            phase === 'uploading'
-                              ? '20%'
-                              : phase === 'preprocessing'
-                                ? '40%'
-                                : phase === 'extracting_features'
-                                  ? '60%'
-                                  : phase === 'classifying'
-                                    ? '80%'
-                                    : phase === 'extracting_invoice'
-                                      ? '90%'
-                                      : '100%',
-                        }}
-                      />
-                    </div>
-                    <span className={styles.phaseLabel}>
-                      {phase === 'uploading' && 'Uploading documents...'}
-                      {phase === 'preprocessing' && 'Preprocessing and OCR...'}
-                      {phase === 'extracting_features' && 'Extracting features (TF-IDF, layout)...'}
-                      {phase === 'classifying' && 'Running ensemble classifier...'}
-                      {phase === 'extracting_invoice' && 'Extracting invoice fields (NER, regex)...'}
-                    </span>
+                    {documents.length > 0 && (
+                      <Button variant="ghost" size="md" onClick={onReset} disabled={isProcessing}>
+                        Clear All
+                      </Button>
+                    )}
                   </div>
-                )}
+
+                  <div className={styles.workspaceDock}>
+                    <div className={styles.workspaceDockHeader}>
+                      <div>
+                        <span className={styles.workspaceDockEyebrow}>Workflow summary</span>
+                        <p className={styles.workspaceDockTitle}>{phaseMessage}</p>
+                        <p className={styles.workspaceDockMeta}>{stagedSummary}</p>
+                      </div>
+                      <div className={styles.workspaceDial} aria-hidden="true">
+                        <span className={styles.workspaceDialValue}>
+                          {String(documents.length).padStart(2, '0')}
+                        </span>
+                        <span className={styles.workspaceDialLabel}>staged</span>
+                      </div>
+                    </div>
+
+                    <div className={styles.phaseIndicator}>
+                      <div className={styles.phaseBar}>
+                        <div
+                          className={styles.phaseFill}
+                          style={{ width: phaseProgress[phase] }}
+                        />
+                      </div>
+                      <span className={styles.phaseLabel}>{phaseMessage}</span>
+                    </div>
+
+                    <div className={styles.workspaceSignals}>
+                      {workflowSignals.map((item) => (
+                        <div key={item.label} className={styles.workspaceSignal}>
+                          <span className={styles.workspaceSignalLabel}>{item.label}</span>
+                          <span className={styles.workspaceSignalValue}>{item.value}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
               </Card>
             </div>
           </div>

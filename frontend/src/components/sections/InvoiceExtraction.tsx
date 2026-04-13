@@ -9,6 +9,7 @@ import { Container } from '../layout/Container';
 import styles from './InvoiceExtraction.module.css';
 
 interface InvoiceExtractionProps {
+  activeDocumentName: string;
   result: InvoiceExtractionResult | null;
   isVisible: boolean;
 }
@@ -25,6 +26,7 @@ function FieldCard({ field, index }: { field: ExtractedField; index: number }) {
 
   return (
     <motion.div
+      className={field.key === 'totalAmount' ? styles.featuredField : ''}
       initial={reducedMotion ? undefined : { opacity: 0, y: 15, scale: 0.97 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{
@@ -64,7 +66,11 @@ function FieldCard({ field, index }: { field: ExtractedField; index: number }) {
   );
 }
 
-export function InvoiceExtraction({ result, isVisible }: InvoiceExtractionProps) {
+export function InvoiceExtraction({
+  activeDocumentName,
+  result,
+  isVisible,
+}: InvoiceExtractionProps) {
   if (!isVisible || !result) return null;
 
   const fields: ExtractedField[] = [
@@ -83,13 +89,21 @@ export function InvoiceExtraction({ result, isVisible }: InvoiceExtractionProps)
           <div className={styles.header}>
             <Badge label="Invoice Extraction" variant="success" size="md" dot />
             <h2 id="extraction-title" className={styles.title}>
-              Extracted invoice fields
+              Recovered invoice fields
             </h2>
             <p className={styles.subtitle}>
-              Because the document was classified as an invoice, the interface switches from
-              category detection to structured evidence capture and surfaces the fields most useful
-              in a live explanation.
+              When the winning class is an invoice, the interface shifts from prediction to the
+              fields that matter most.
             </p>
+            <div
+              className={styles.documentContext}
+              role="status"
+              aria-live="polite"
+              aria-label={`Active document ${activeDocumentName}`}
+            >
+              <span className={styles.documentContextLabel}>Active document</span>
+              <span className={styles.documentContextName}>{activeDocumentName}</span>
+            </div>
           </div>
         </SectionReveal>
 
@@ -99,21 +113,6 @@ export function InvoiceExtraction({ result, isVisible }: InvoiceExtractionProps)
           ))}
         </div>
 
-        <SectionReveal delay={0.4}>
-          <div className={styles.summary}>
-            <Card variant="glass" padding="md">
-              <p className={styles.summaryText}>
-                <strong>Extraction summary:</strong> all 6 primary invoice fields were identified
-                with an average confidence of{' '}
-                <strong>
-                  {((fields.reduce((a, f) => a + f.confidence, 0) / fields.length) * 100).toFixed(1)}%
-                </strong>
-                . This makes the output easy to verify in front of an audience without reading the
-                whole document line by line.
-              </p>
-            </Card>
-          </div>
-        </SectionReveal>
       </Container>
     </section>
   );

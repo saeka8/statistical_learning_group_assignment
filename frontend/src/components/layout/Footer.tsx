@@ -7,11 +7,11 @@ export function Footer() {
       <Container>
         <div className={styles.inner}>
           <div className={styles.left}>
+            <span className={styles.eyebrow}>Academic showcase</span>
             <h3 className={styles.title}>DocLens</h3>
             <p className={styles.description}>
-              Document Classification and Invoice Information Extraction - a group project for the
-              Statistical Learning and Prediction course. Built with traditional machine learning,
-              NLP, and computer vision methods.
+              A cleaner interface for a Statistical Learning and Prediction course project focused
+              on document classification and invoice extraction.
             </p>
           </div>
 
@@ -21,19 +21,19 @@ export function Footer() {
               <span className={styles.metaValue}>Statistical Learning and Prediction</span>
             </div>
             <div className={styles.meta}>
-              <span className={styles.metaLabel}>Approach</span>
-              <span className={styles.metaValue}>Traditional ML / NLP / CV</span>
+              <span className={styles.metaLabel}>Methods</span>
+              <span className={styles.metaValue}>OCR, TF-IDF, classical ML, regex-assisted NER</span>
             </div>
             <div className={styles.meta}>
-              <span className={styles.metaLabel}>Focus</span>
-              <span className={styles.metaValue}>Classification and invoice extraction</span>
+              <span className={styles.metaLabel}>Purpose</span>
+              <span className={styles.metaValue}>Demo-ready document analysis surface</span>
             </div>
           </div>
         </div>
 
         <div className={styles.bottom}>
           <p className={styles.copyright}>
-            (c) 2025 DocLens - Academic project. All analysis uses traditional, non-generative AI.
+            (c) 2026 DocLens. Academic interface built around non-generative methods.
           </p>
         </div>
       </Container>
