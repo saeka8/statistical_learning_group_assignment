@@ -27,3 +27,5 @@ dist/
 Thumbs.db
 
 node_modules/
+
+runs
