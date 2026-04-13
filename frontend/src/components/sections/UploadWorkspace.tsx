@@ -26,9 +26,9 @@ interface UploadWorkspaceProps {
 
 const sampleGlyphs = {
   invoice: 'INV',
-  contract: 'CTR',
-  technical_report: 'RPT',
   email: 'EML',
+  resume: 'RES',
+  scientific_publication: 'SCI',
 } as const;
 
 export function UploadWorkspace({

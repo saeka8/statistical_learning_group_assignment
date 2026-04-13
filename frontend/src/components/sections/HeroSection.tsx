@@ -6,9 +6,9 @@ import { Container } from '../layout/Container';
 import styles from './HeroSection.module.css';
 
 const proofItems = [
-  { value: '6', label: 'document classes' },
-  { value: '310 ms', label: 'average latency' },
-  { value: '96.1%', label: 'invoice completeness' },
+  { value: '4', label: 'document classes' },
+  { value: '~4 s', label: 'average latency' },
+  { value: '87.5%', label: 'classification accuracy' },
 ];
 
 export function HeroSection() {

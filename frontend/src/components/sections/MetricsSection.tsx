@@ -41,7 +41,7 @@ export function MetricsSection() {
                     <AnimatedCounter
                       target={metric.value}
                       suffix={metric.suffix}
-                      decimals={metric.suffix === 'ms' ? 0 : 1}
+                      decimals={metric.suffix === 's' ? 1 : metric.suffix === '%' ? 1 : 0}
                     />
                   ) : (
                     `0${metric.suffix}`
@@ -56,23 +56,23 @@ export function MetricsSection() {
         <SectionReveal delay={0.4}>
           <div className={styles.miniStats}>
             <div className={styles.miniStat}>
-              <span className={styles.miniValue}>6</span>
+              <span className={styles.miniValue}>4</span>
               <span className={styles.miniLabel}>Document Categories</span>
             </div>
             <div className={styles.miniDivider} aria-hidden="true" />
             <div className={styles.miniStat}>
-              <span className={styles.miniValue}>1,200+</span>
+              <span className={styles.miniValue}>400</span>
               <span className={styles.miniLabel}>Training Samples</span>
             </div>
             <div className={styles.miniDivider} aria-hidden="true" />
             <div className={styles.miniStat}>
-              <span className={styles.miniValue}>5-fold</span>
-              <span className={styles.miniLabel}>Cross-Validation</span>
+              <span className={styles.miniValue}>533</span>
+              <span className={styles.miniLabel}>Hybrid Features (NLP + CV)</span>
             </div>
             <div className={styles.miniDivider} aria-hidden="true" />
             <div className={styles.miniStat}>
-              <span className={styles.miniValue}>3</span>
-              <span className={styles.miniLabel}>Ensemble Models</span>
+              <span className={styles.miniValue}>GridSearchCV</span>
+              <span className={styles.miniLabel}>Hyperparameter Tuning</span>
             </div>
           </div>
         </SectionReveal>

@@ -9,67 +9,57 @@ import type {
 
 export const allCategories: CategoryScore[] = [
   { category: 'invoice', label: 'Invoice', confidence: 0, icon: 'INV' },
-  { category: 'contract', label: 'Contract', confidence: 0, icon: 'CTR' },
-  { category: 'technical_report', label: 'Technical Report', confidence: 0, icon: 'RPT' },
   { category: 'email', label: 'Email', confidence: 0, icon: 'EML' },
-  { category: 'receipt', label: 'Receipt', confidence: 0, icon: 'RCT' },
-  { category: 'letter', label: 'Letter', confidence: 0, icon: 'LTR' },
+  { category: 'resume', label: 'Resume', confidence: 0, icon: 'RES' },
+  { category: 'scientific_publication', label: 'Scientific Publication', confidence: 0, icon: 'SCI' },
 ];
 
 export const sampleInvoiceClassification: ClassificationResult = {
   predictedCategory: 'invoice',
   predictedLabel: 'Invoice',
   scores: [
-    { category: 'invoice', label: 'Invoice', confidence: 0.943, icon: 'INV' },
-    { category: 'receipt', label: 'Receipt', confidence: 0.031, icon: 'RCT' },
-    { category: 'contract', label: 'Contract', confidence: 0.012, icon: 'CTR' },
-    { category: 'letter', label: 'Letter', confidence: 0.008, icon: 'LTR' },
-    { category: 'technical_report', label: 'Technical Report', confidence: 0.004, icon: 'RPT' },
-    { category: 'email', label: 'Email', confidence: 0.002, icon: 'EML' },
+    { category: 'invoice', label: 'Invoice', confidence: 0.821, icon: 'INV' },
+    { category: 'scientific_publication', label: 'Scientific Publication', confidence: 0.112, icon: 'SCI' },
+    { category: 'email', label: 'Email', confidence: 0.038, icon: 'EML' },
+    { category: 'resume', label: 'Resume', confidence: 0.029, icon: 'RES' },
   ],
-  processingTimeMs: 342,
+  processingTimeMs: 4200,
 };
 
-export const sampleContractClassification: ClassificationResult = {
-  predictedCategory: 'contract',
-  predictedLabel: 'Contract',
+export const sampleResumeClassification: ClassificationResult = {
+  predictedCategory: 'resume',
+  predictedLabel: 'Resume',
   scores: [
-    { category: 'contract', label: 'Contract', confidence: 0.891, icon: 'CTR' },
-    { category: 'letter', label: 'Letter', confidence: 0.054, icon: 'LTR' },
-    { category: 'invoice', label: 'Invoice', confidence: 0.028, icon: 'INV' },
-    { category: 'technical_report', label: 'Technical Report', confidence: 0.015, icon: 'RPT' },
-    { category: 'email', label: 'Email', confidence: 0.008, icon: 'EML' },
-    { category: 'receipt', label: 'Receipt', confidence: 0.004, icon: 'RCT' },
+    { category: 'resume', label: 'Resume', confidence: 0.956, icon: 'RES' },
+    { category: 'scientific_publication', label: 'Scientific Publication', confidence: 0.023, icon: 'SCI' },
+    { category: 'invoice', label: 'Invoice', confidence: 0.012, icon: 'INV' },
+    { category: 'email', label: 'Email', confidence: 0.009, icon: 'EML' },
   ],
-  processingTimeMs: 287,
+  processingTimeMs: 3800,
 };
 
 export const sampleReportClassification: ClassificationResult = {
-  predictedCategory: 'technical_report',
-  predictedLabel: 'Technical Report',
+  predictedCategory: 'scientific_publication',
+  predictedLabel: 'Scientific Publication',
   scores: [
-    { category: 'technical_report', label: 'Technical Report', confidence: 0.917, icon: 'RPT' },
-    { category: 'email', label: 'Email', confidence: 0.038, icon: 'EML' },
-    { category: 'letter', label: 'Letter', confidence: 0.022, icon: 'LTR' },
-    { category: 'contract', label: 'Contract', confidence: 0.013, icon: 'CTR' },
-    { category: 'invoice', label: 'Invoice', confidence: 0.006, icon: 'INV' },
-    { category: 'receipt', label: 'Receipt', confidence: 0.004, icon: 'RCT' },
+    { category: 'scientific_publication', label: 'Scientific Publication', confidence: 0.710, icon: 'SCI' },
+    { category: 'invoice', label: 'Invoice', confidence: 0.175, icon: 'INV' },
+    { category: 'resume', label: 'Resume', confidence: 0.068, icon: 'RES' },
+    { category: 'email', label: 'Email', confidence: 0.047, icon: 'EML' },
   ],
-  processingTimeMs: 305,
+  processingTimeMs: 5100,
 };
 
 export const sampleEmailClassification: ClassificationResult = {
   predictedCategory: 'email',
   predictedLabel: 'Email',
   scores: [
-    { category: 'email', label: 'Email', confidence: 0.872, icon: 'EML' },
-    { category: 'letter', label: 'Letter', confidence: 0.071, icon: 'LTR' },
-    { category: 'contract', label: 'Contract', confidence: 0.029, icon: 'CTR' },
-    { category: 'technical_report', label: 'Technical Report', confidence: 0.016, icon: 'RPT' },
-    { category: 'invoice', label: 'Invoice', confidence: 0.008, icon: 'INV' },
-    { category: 'receipt', label: 'Receipt', confidence: 0.004, icon: 'RCT' },
+    { category: 'email', label: 'Email', confidence: 0.884, icon: 'EML' },
+    { category: 'invoice', label: 'Invoice', confidence: 0.063, icon: 'INV' },
+    { category: 'scientific_publication', label: 'Scientific Publication', confidence: 0.028, icon: 'SCI' },
+    { category: 'resume', label: 'Resume', confidence: 0.025, icon: 'RES' },
   ],
-  processingTimeMs: 251,
+  processingTimeMs: 3500,
 };
 
 export const sampleInvoiceExtraction: InvoiceExtractionResult = {
@@ -77,37 +67,37 @@ export const sampleInvoiceExtraction: InvoiceExtractionResult = {
     key: 'invoiceNumber',
     label: 'Invoice Number',
     value: 'INV-2025-00847',
-    confidence: 0.98,
+    confidence: 0.85,
   },
   invoiceDate: {
     key: 'invoiceDate',
     label: 'Invoice Date',
     value: '2025-01-15',
-    confidence: 0.96,
+    confidence: 0.80,
   },
   dueDate: {
     key: 'dueDate',
     label: 'Due Date',
     value: '2025-02-14',
-    confidence: 0.93,
+    confidence: 0.65,
   },
   issuerName: {
     key: 'issuerName',
     label: 'Issuer Name',
     value: 'Nexus Technology Solutions Ltd.',
-    confidence: 0.97,
+    confidence: 0.75,
   },
   recipientName: {
     key: 'recipientName',
     label: 'Recipient Name',
     value: 'Arcadia Digital Ventures GmbH',
-    confidence: 0.95,
+    confidence: 0.70,
   },
   totalAmount: {
     key: 'totalAmount',
     label: 'Total Amount',
     value: 'EUR 12,480.00',
-    confidence: 0.99,
+    confidence: 0.82,
   },
 };
 
@@ -132,15 +122,15 @@ export const pipelineSteps: PipelineStep[] = [
     id: 'features',
     title: 'Feature Extraction',
     description: 'The system derives lexical, structural, and visual signals from the document.',
-    techniques: ['TF-IDF vectors', 'N-gram features', 'Layout heuristics', 'Structural patterns'],
+    techniques: ['TF-IDF vectors (500 features)', 'Bigram features', 'HOG descriptors', 'Text density grid', 'Edge & margin features'],
     icon: 'FX',
     status: 'complete',
   },
   {
     id: 'classification',
     title: 'Document Classification',
-    description: 'An ensemble of classical models selects one document class from the known set.',
-    techniques: ['SVM classifier', 'Random Forest', 'Logistic Regression', 'Ensemble voting'],
+    description: 'A hybrid NLP + Computer Vision Random Forest model selects one document class.',
+    techniques: ['Random Forest (200 trees)', 'Hybrid text + image features (533 total)', 'GridSearchCV tuning'],
     icon: 'CLS',
     status: 'complete',
   },
@@ -148,8 +138,8 @@ export const pipelineSteps: PipelineStep[] = [
     id: 'extraction',
     title: 'Invoice Field Extraction',
     description: 'Invoices trigger structured extraction and validation of high-value business fields.',
-    techniques: ['Regex patterns', 'Named Entity Recognition', 'Spatial analysis', 'Field validation'],
-    icon: 'NER',
+    techniques: ['Cascading regex patterns', 'Multi-pass search', 'Spatial heuristics', 'Field validation'],
+    icon: 'EXT',
     status: 'complete',
   },
 ];
@@ -157,29 +147,29 @@ export const pipelineSteps: PipelineStep[] = [
 export const sampleMetrics: MetricCard[] = [
   {
     label: 'Classification Accuracy',
-    value: 94.7,
+    value: 87.5,
     suffix: '%',
-    description: 'Weighted average across all 6 document categories on the held-out test set.',
+    description: 'Weighted average across all 4 document categories on the held-out test set.',
     color: 'var(--color-accent-indigo)',
   },
   {
     label: 'Macro F1-Score',
-    value: 92.3,
+    value: 85.2,
     suffix: '%',
     description: 'Harmonic mean of precision and recall, macro-averaged over all classes.',
     color: 'var(--color-accent-blue)',
   },
   {
     label: 'Invoice Extraction Completeness',
-    value: 96.1,
+    value: 37.0,
     suffix: '%',
-    description: 'Percentage of invoice fields correctly identified and extracted from test invoices.',
+    description: 'Percentage of invoice fields correctly extracted from SROIE test invoices.',
     color: 'var(--color-accent-emerald)',
   },
   {
     label: 'Avg. Processing Time',
-    value: 310,
-    suffix: 'ms',
+    value: 4.2,
+    suffix: 's',
     description: 'Mean end-to-end latency from document upload to final extraction result.',
     color: 'var(--color-accent-violet)',
   },
@@ -193,26 +183,26 @@ export const caseStudies: CaseStudy[] = [
     previewPlaceholder: 'INVOICE',
     classifiedAs: 'invoice',
     classifiedLabel: 'Invoice',
-    confidence: 0.943,
+    confidence: 0.821,
     extraction: sampleInvoiceExtraction,
   },
   {
     id: 'cs2',
-    documentName: 'nda_agreement_v3.pdf',
-    documentType: 'PDF - Digital Contract',
-    previewPlaceholder: 'CONTRACT',
-    classifiedAs: 'contract',
-    classifiedLabel: 'Contract',
-    confidence: 0.891,
+    documentName: 'john_doe_resume.png',
+    documentType: 'PNG - Scanned Resume',
+    previewPlaceholder: 'RESUME',
+    classifiedAs: 'resume',
+    classifiedLabel: 'Resume',
+    confidence: 0.956,
   },
   {
     id: 'cs3',
-    documentName: 'q4_analysis_report.pdf',
-    documentType: 'PDF - Technical Report',
-    previewPlaceholder: 'REPORT',
-    classifiedAs: 'technical_report',
-    classifiedLabel: 'Technical Report',
-    confidence: 0.917,
+    documentName: 'neural_networks_survey.pdf',
+    documentType: 'PDF - Scientific Publication',
+    previewPlaceholder: 'PAPER',
+    classifiedAs: 'scientific_publication',
+    classifiedLabel: 'Scientific Publication',
+    confidence: 0.710,
   },
 ];
 
@@ -221,7 +211,7 @@ export interface SampleDocument {
   name: string;
   type: string;
   size: number;
-  category: 'invoice' | 'contract' | 'technical_report' | 'email';
+  category: 'invoice' | 'email' | 'resume' | 'scientific_publication';
   classification: ClassificationResult;
   extraction?: InvoiceExtractionResult;
 }
@@ -237,19 +227,19 @@ export const sampleDocuments: SampleDocument[] = [
     extraction: sampleInvoiceExtraction,
   },
   {
-    id: 'sample_contract',
-    name: 'nda_agreement_v3.pdf',
-    type: 'application/pdf',
-    size: 512340,
-    category: 'contract',
-    classification: sampleContractClassification,
+    id: 'sample_resume',
+    name: 'john_doe_resume.png',
+    type: 'image/png',
+    size: 172550,
+    category: 'resume',
+    classification: sampleResumeClassification,
   },
   {
     id: 'sample_report',
-    name: 'q4_performance_analysis.pdf',
+    name: 'neural_networks_survey.pdf',
     type: 'application/pdf',
     size: 1048576,
-    category: 'technical_report',
+    category: 'scientific_publication',
     classification: sampleReportClassification,
   },
   {

@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Document Classification Pipeline</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background: #f0f4f8; color: #1a202c; padding: 40px 20px; }
+
+  .container { max-width: 1100px; margin: 0 auto; }
+
+  h1 { text-align: center; font-size: 28px; font-weight: 700; margin-bottom: 6px; color: #1a365d; }
+  .subtitle { text-align: center; font-size: 15px; color: #718096; margin-bottom: 40px; }
+
+  .phase { margin-bottom: 36px; }
+  .phase-header { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+  .phase-number { background: #2b6cb0; color: white; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 15px; flex-shrink: 0; }
+  .phase-title { font-size: 18px; font-weight: 600; color: #2d3748; }
+  .phase-status { font-size: 12px; padding: 3px 10px; border-radius: 12px; font-weight: 600; margin-left: auto; }
+  .status-done { background: #c6f6d5; color: #22543d; }
+  .status-next { background: #fefcbf; color: #744210; }
+  .status-pending { background: #e2e8f0; color: #4a5568; }
+
+  .flow-row { display: flex; gap: 12px; align-items: stretch; flex-wrap: wrap; margin-left: 44px; }
+  .flow-box { background: white; border-radius: 10px; padding: 16px; flex: 1; min-width: 200px; border: 1px solid #e2e8f0; box-shadow: 0 1px 3px rgba(0,0,0,0.06); position: relative; }
+  .flow-box h3 { font-size: 14px; font-weight: 600; color: #2b6cb0; margin-bottom: 6px; }
+  .flow-box p { font-size: 13px; color: #4a5568; line-height: 1.5; }
+  .flow-box .tech { font-size: 11px; color: #718096; margin-top: 8px; padding-top: 8px; border-top: 1px solid #edf2f7; }
+  .flow-box .tech span { background: #edf2f7; padding: 2px 7px; border-radius: 4px; margin-right: 4px; font-family: 'SF Mono', monospace; }
+
+  .arrow-down { text-align: center; margin: 12px 0; margin-left: 44px; }
+  .arrow-down svg { width: 24px; height: 24px; fill: #a0aec0; }
+
+  .split-section { margin-left: 44px; display: flex; gap: 20px; }
+  .split-branch { flex: 1; background: white; border-radius: 10px; padding: 20px; border: 1px solid #e2e8f0; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+  .split-branch h3 { font-size: 15px; font-weight: 600; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
+  .branch-text h3 { color: #2b6cb0; }
+  .branch-image h3 { color: #38a169; }
+  .branch-icon { width: 28px; height: 28px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 14px; }
+  .icon-text { background: #ebf8ff; }
+  .icon-image { background: #f0fff4; }
+
+  .step { padding: 8px 0; border-bottom: 1px solid #f7fafc; }
+  .step:last-child { border-bottom: none; }
+  .step-label { font-size: 12px; font-weight: 600; color: #718096; text-transform: uppercase; letter-spacing: 0.5px; }
+  .step-value { font-size: 13px; color: #2d3748; margin-top: 2px; }
+
+  .merge-box { margin-left: 44px; background: linear-gradient(135deg, #ebf8ff 0%, #f0fff4 100%); border: 2px solid #bee3f8; border-radius: 10px; padding: 16px 20px; text-align: center; }
+  .merge-box h3 { font-size: 15px; font-weight: 600; color: #2d3748; }
+  .merge-box p { font-size: 13px; color: #4a5568; margin-top: 4px; }
+
+  .output-grid { margin-left: 44px; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .output-box { background: white; border-radius: 10px; padding: 16px; border: 1px solid #e2e8f0; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+  .output-box h4 { font-size: 14px; font-weight: 600; color: #2d3748; margin-bottom: 4px; }
+  .output-box p { font-size: 13px; color: #4a5568; line-height: 1.5; }
+
+  .data-summary { margin-left: 44px; background: #1a365d; color: white; border-radius: 10px; padding: 20px; display: flex; gap: 20px; flex-wrap: wrap; }
+  .data-item { flex: 1; min-width: 120px; text-align: center; }
+  .data-item .num { font-size: 24px; font-weight: 700; color: #63b3ed; }
+  .data-item .label { font-size: 12px; color: #a0aec0; margin-top: 2px; }
+
+  .categories-row { margin-left: 44px; display: flex; gap: 10px; flex-wrap: wrap; }
+  .cat-chip { padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 600; }
+  .cat-invoice { background: #fed7d7; color: #9b2c2c; }
+  .cat-email { background: #c6f6d5; color: #22543d; }
+  .cat-resume { background: #fefcbf; color: #744210; }
+  .cat-sci { background: #e9d8fd; color: #553c9a; }
+
+  .legend { margin-top: 30px; padding: 16px 20px; background: white; border-radius: 10px; border: 1px solid #e2e8f0; margin-left: 44px; }
+  .legend h4 { font-size: 13px; font-weight: 600; color: #718096; margin-bottom: 8px; }
+  .legend-items { display: flex; gap: 20px; flex-wrap: wrap; }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-size: 13px; color: #4a5568; }
+  .legend-dot { width: 10px; height: 10px; border-radius: 50%; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>Document Classification & Information Extraction</h1>
+  <p class="subtitle">IE University — Statistical Learning and Prediction — End-to-End Pipeline</p>
+
+  <!-- Phase 1: Data -->
+  <div class="phase">
+    <div class="phase-header">
+      <div class="phase-number">1</div>
+      <div class="phase-title">Data Sources & Categories</div>
+      <span class="phase-status status-done">COMPLETE</span>
+    </div>
+    <div class="categories-row" style="margin-bottom: 12px;">
+      <div class="cat-chip cat-invoice">Invoices (required)</div>
+      <div class="cat-chip cat-email">Emails</div>
+      <div class="cat-chip cat-resume">Resumes</div>
+      <div class="cat-chip cat-sci">Scientific Publications</div>
+    </div>
+    <div class="data-summary">
+      <div class="data-item">
+        <div class="num">400</div>
+        <div class="label">RVL-CDIP Images<br>(100 per class)</div>
+      </div>
+      <div class="data-item">
+        <div class="num">626</div>
+        <div class="label">SROIE Invoices<br>(annotated fields)</div>
+      </div>
+      <div class="data-item">
+        <div class="num">4</div>
+        <div class="label">Document<br>Categories</div>
+      </div>
+      <div class="data-item">
+        <div class="num">33+500</div>
+        <div class="label">Image + Text<br>Features</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="arrow-down"><svg viewBox="0 0 24 24"><path d="M12 4v16m0 0l-6-6m6 6l6-6"/></svg></div>
+
+  <!-- Phase 2: Feature Extraction (Split) -->
+  <div class="phase">
+    <div class="phase-header">
+      <div class="phase-number">2</div>
+      <div class="phase-title">Hybrid Feature Extraction (Parallel Pipelines)</div>
+      <span class="phase-status status-done">COMPLETE</span>
+    </div>
+    <div class="split-section">
+      <div class="split-branch branch-text">
+        <h3><div class="branch-icon icon-text">A</div> Text Pipeline (NLP)</h3>
+        <div class="step">
+          <div class="step-label">Step 1 — OCR</div>
+          <div class="step-value">Tesseract extracts text from scanned document images</div>
+        </div>
+        <div class="step">
+          <div class="step-label">Step 2 — Preprocessing</div>
+          <div class="step-value">Tokenization, stop word removal, lowercasing</div>
+        </div>
+        <div class="step">
+          <div class="step-label">Step 3 — Vectorization</div>
+          <div class="step-value">TF-IDF with unigrams + bigrams → 500 features</div>
+        </div>
+        <div class="step">
+          <div class="step-label">Output</div>
+          <div class="step-value" style="font-weight:600; color:#2b6cb0;">500-dimensional text feature vector</div>
+        </div>
+      </div>
+      <div class="split-branch branch-image">
+        <h3><div class="branch-icon icon-image">B</div> Image Pipeline (CV)</h3>
+        <div class="step">
+          <div class="step-label">Step 1 — Preprocessing</div>
+          <div class="step-value">Grayscale conversion, resize to 256×256</div>
+        </div>
+        <div class="step">
+          <div class="step-label">Step 2 — Layout Features</div>
+          <div class="step-value">Text density (4×4 grid), whitespace ratios, margins</div>
+        </div>
+        <div class="step">
+          <div class="step-label">Step 3 — Structural Features</div>
+          <div class="step-value">HOG descriptors, Sobel edge density & std</div>
+        </div>
+        <div class="step">
+          <div class="step-label">Output</div>
+          <div class="step-value" style="font-weight:600; color:#38a169;">33-dimensional image feature vector</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="arrow-down"><svg viewBox="0 0 24 24"><path d="M12 4v16m0 0l-6-6m6 6l6-6"/></svg></div>
+
+  <!-- Phase 3: Merge & Classify -->
+  <div class="phase">
+    <div class="phase-header">
+      <div class="phase-number">3</div>
+      <div class="phase-title">Feature Fusion & Classification</div>
+      <span class="phase-status status-next">UP NEXT</span>
+    </div>
+    <div class="merge-box" style="margin-bottom: 12px;">
+      <h3>Feature Concatenation</h3>
+      <p>Text (500) + Image (33) → Combined 533-dimensional feature vector per document</p>
+    </div>
+    <div class="flow-row">
+      <div class="flow-box">
+        <h3>Train/Test Split</h3>
+        <p>80/20 stratified split maintaining class balance across all 4 categories</p>
+        <div class="tech"><span>sklearn</span> train_test_split</div>
+      </div>
+      <div class="flow-box">
+        <h3>Feature Scaling</h3>
+        <p>StandardScaler normalization so text and image features contribute equally</p>
+        <div class="tech"><span>sklearn</span> StandardScaler</div>
+      </div>
+      <div class="flow-box">
+        <h3>Classifier Training</h3>
+        <p>SVM (RBF kernel) and Random Forest — compare both, pick best performer</p>
+        <div class="tech"><span>SVM</span> <span>RandomForest</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="arrow-down"><svg viewBox="0 0 24 24"><path d="M12 4v16m0 0l-6-6m6 6l6-6"/></svg></div>
+
+  <!-- Phase 4: Classification Output -->
+  <div class="phase">
+    <div class="phase-header">
+      <div class="phase-number">4</div>
+      <div class="phase-title">Classification Output</div>
+      <span class="phase-status status-pending">PENDING</span>
+    </div>
+    <div class="flow-row">
+      <div class="flow-box" style="flex: 2;">
+        <h3>Document Category Prediction</h3>
+        <p>For any new document image, the system predicts one of: Invoice, Email, Resume, or Scientific Publication. Evaluation via accuracy, precision, recall, F1-score, and confusion matrix.</p>
+      </div>
+      <div class="flow-box" style="flex: 1; border-color: #fed7d7; background: #fff5f5;">
+        <h3 style="color: #c53030;">If Invoice →</h3>
+        <p>Route to Invoice Information Extraction module (Phase 5)</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="arrow-down"><svg viewBox="0 0 24 24"><path d="M12 4v16m0 0l-6-6m6 6l6-6"/></svg></div>
+
+  <!-- Phase 5: Invoice Extraction -->
+  <div class="phase">
+    <div class="phase-header">
+      <div class="phase-number">5</div>
+      <div class="phase-title">Invoice Information Extraction</div>
+      <span class="phase-status status-pending">PENDING</span>
+    </div>
+    <div class="flow-row" style="margin-bottom: 12px;">
+      <div class="flow-box">
+        <h3>OCR Text Input</h3>
+        <p>Raw OCR text from the invoice document image (already extracted in Phase 2)</p>
+      </div>
+      <div class="flow-box">
+        <h3>Regex & Rule Engine</h3>
+        <p>Pattern matching with regular expressions tuned for invoice field formats</p>
+        <div class="tech"><span>regex</span> <span>dateutil</span></div>
+      </div>
+    </div>
+    <div class="output-grid">
+      <div class="output-box">
+        <h4>Invoice Number</h4>
+        <p>Pattern: "Invoice #", "Inv No.", "No." followed by alphanumeric</p>
+      </div>
+      <div class="output-box">
+        <h4>Invoice Date</h4>
+        <p>Date patterns: MM/DD/YYYY, Month DD YYYY, etc.</p>
+      </div>
+      <div class="output-box">
+        <h4>Due Date</h4>
+        <p>Pattern: "Due", "Payment Due" near date format</p>
+      </div>
+      <div class="output-box">
+        <h4>Issuer Name</h4>
+        <p>Top-of-document text, company name patterns</p>
+      </div>
+      <div class="output-box">
+        <h4>Recipient Name</h4>
+        <p>Pattern: "Bill To", "Ship To", "Attn" sections</p>
+      </div>
+      <div class="output-box">
+        <h4>Total Amount</h4>
+        <p>Pattern: "Total", "Amount Due" near currency format ($X,XXX.XX)</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="arrow-down"><svg viewBox="0 0 24 24"><path d="M12 4v16m0 0l-6-6m6 6l6-6"/></svg></div>
+
+  <!-- Phase 6: Evaluation -->
+  <div class="phase">
+    <div class="phase-header">
+      <div class="phase-number">6</div>
+      <div class="phase-title">Evaluation & Deliverables</div>
+      <span class="phase-status status-pending">PENDING</span>
+    </div>
+    <div class="flow-row">
+      <div class="flow-box">
+        <h3>Classification Metrics</h3>
+        <p>Accuracy, Precision, Recall, F1 per class, Confusion Matrix</p>
+      </div>
+      <div class="flow-box">
+        <h3>Extraction Accuracy</h3>
+        <p>Field-level precision against SROIE ground truth annotations</p>
+      </div>
+      <div class="flow-box">
+        <h3>Deliverables</h3>
+        <p>Technical docs, source code, 15-min presentation, live demo</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Legend -->
+  <div class="legend">
+    <h4>Technology Stack (All Traditional / Classical — No Generative AI)</h4>
+    <div class="legend-items">
+      <div class="legend-item"><div class="legend-dot" style="background:#2b6cb0;"></div> Tesseract OCR</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#38a169;"></div> scikit-learn (TF-IDF, SVM, RF)</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#805ad5;"></div> scikit-image (HOG)</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#d69e2e;"></div> SciPy (Sobel edges)</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#e53e3e;"></div> Python regex (extraction)</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#718096;"></div> NumPy / Pandas</div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

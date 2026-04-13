@@ -1,10 +1,8 @@
 export type DocumentCategory =
   | 'invoice'
-  | 'contract'
-  | 'technical_report'
   | 'email'
-  | 'receipt'
-  | 'letter';
+  | 'resume'
+  | 'scientific_publication';
 
 export interface CategoryScore {
   category: DocumentCategory;
