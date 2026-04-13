@@ -1,0 +1,176 @@
+import magic
+from django.conf import settings
+from rest_framework import generics, permissions, status
+from rest_framework.response import Response
+from rest_framework.views import APIView
+
+from .models import Document, DocumentStatus, InvoiceExtraction
+from .serializers import DocumentListSerializer, DocumentDetailSerializer, InvoiceExtractionSerializer
+from .storage import upload_file, delete_file, generate_presigned_url
+from .filters import apply_document_filters
+from apps.core.pagination import StandardPagination
+
+
+class DocumentListCreateView(generics.ListCreateAPIView):
+    permission_classes = [permissions.IsAuthenticated]
+    pagination_class = StandardPagination
+
+    def get_queryset(self):
+        qs = Document.objects.filter(owner=self.request.user).select_related(
+            "classification", "invoice_data"
+        )
+        return apply_document_filters(qs, self.request)
+
+    def get_serializer_class(self):
+        return DocumentListSerializer
+
+    def create(self, request, *args, **kwargs):
+        uploaded_file = request.FILES.get("file")
+        if not uploaded_file:
+            return Response(
+                {"error": {"code": "VALIDATION_ERROR", "message": "No file provided.", "field_errors": {}}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if uploaded_file.size > settings.MAX_UPLOAD_BYTES:
+            return Response(
+                {"error": {"code": "FILE_TOO_LARGE", "message": f"Max upload size is {settings.MAX_UPLOAD_MB} MB.", "field_errors": {}}},
+                status=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            )
+
+        mime = magic.from_buffer(uploaded_file.read(2048), mime=True)
+        uploaded_file.seek(0)
+        if mime not in settings.ALLOWED_UPLOAD_CONTENT_TYPES:
+            return Response(
+                {"error": {"code": "UNSUPPORTED_MEDIA_TYPE", "message": f"File type '{mime}' is not supported.", "field_errors": {}}},
+                status=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            )
+
+        storage_key = f"{request.user.pk}/{uploaded_file.name}"
+        upload_file(uploaded_file, storage_key)
+
+        doc = Document.objects.create(
+            owner=request.user,
+            filename=uploaded_file.name,
+            content_type=mime,
+            file_size=uploaded_file.size,
+            storage_key=storage_key,
+        )
+
+        from django_q.tasks import async_task
+        async_task("apps.documents.tasks.run_classification", str(doc.id))
+
+        serializer = DocumentDetailSerializer(doc)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+
+class DocumentDetailView(generics.RetrieveDestroyAPIView):
+    permission_classes = [permissions.IsAuthenticated]
+    serializer_class = DocumentDetailSerializer
+    lookup_field = "id"
+
+    def get_queryset(self):
+        return Document.objects.filter(owner=self.request.user).select_related(
+            "classification", "invoice_data"
+        )
+
+    def destroy(self, request, *args, **kwargs):
+        doc = self.get_object()
+        delete_file(doc.storage_key)
+        doc.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class DocumentDownloadView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, id):
+        try:
+            doc = Document.objects.get(id=id, owner=request.user)
+        except Document.DoesNotExist:
+            return Response(
+                {"error": {"code": "NOT_FOUND", "message": "Document not found.", "field_errors": {}}},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        url = generate_presigned_url(doc.storage_key, expires_in=300)
+        return Response({"url": url, "expires_in": 300})
+
+
+class ClassifyView(APIView):
+    """POST /api/documents/{id}/classify/ — manually re-trigger classification."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, id):
+        try:
+            doc = Document.objects.get(id=id, owner=request.user)
+        except Document.DoesNotExist:
+            return Response(
+                {"error": {"code": "NOT_FOUND", "message": "Document not found.", "field_errors": {}}},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if doc.status == DocumentStatus.PROCESSING:
+            return Response(
+                {"error": {"code": "UNPROCESSABLE", "message": "Document is already being processed.", "field_errors": {}}},
+                status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            )
+
+        from django_q.tasks import async_task
+        task = async_task("apps.documents.tasks.run_classification", str(doc.id))
+
+        return Response(
+            {"job_id": task, "message": "Classification job enqueued."},
+            status=status.HTTP_202_ACCEPTED,
+        )
+
+
+class ClassifyStatusView(APIView):
+    """GET /api/documents/{id}/classify/status/ — poll classification status."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, id):
+        try:
+            doc = Document.objects.get(id=id, owner=request.user)
+        except Document.DoesNotExist:
+            return Response(
+                {"error": {"code": "NOT_FOUND", "message": "Document not found.", "field_errors": {}}},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        classified_at = None
+        if hasattr(doc, "classification"):
+            classified_at = doc.classification.classified_at
+
+        return Response({
+            "document_id": str(doc.id),
+            "status": doc.status,
+            "started_at": None,
+            "completed_at": classified_at,
+        })
+
+
+class ExtractionView(APIView):
+    """GET /api/documents/{id}/extraction/ — return extracted invoice fields."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, id):
+        try:
+            doc = Document.objects.get(id=id, owner=request.user)
+        except Document.DoesNotExist:
+            return Response(
+                {"error": {"code": "NOT_FOUND", "message": "Document not found.", "field_errors": {}}},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        try:
+            extraction = doc.invoice_data
+        except InvoiceExtraction.DoesNotExist:
+            return Response(
+                {"error": {"code": "NOT_FOUND", "message": "No invoice extraction available for this document.", "field_errors": {}}},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        return Response(InvoiceExtractionSerializer(extraction).data)

@@ -1,0 +1,165 @@
+.header {
+  text-align: center;
+  margin-bottom: var(--space-10);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.title {
+  font-size: var(--text-3xl);
+  font-weight: 800;
+}
+
+.subtitle {
+  max-width: 620px;
+  color: var(--color-text-secondary);
+  line-height: 1.8;
+}
+
+.predictedWrapper {
+  max-width: 820px;
+  margin: 0 auto var(--space-10);
+}
+
+.predictedCard {
+  background:
+    radial-gradient(circle at top right, rgba(37, 99, 235, 0.08), transparent 28%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(247, 250, 255, 0.98));
+  border-color: var(--color-border-accent);
+  box-shadow: var(--shadow-elevated);
+}
+
+.predictedInner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-6);
+}
+
+.predictedLeft {
+  display: flex;
+  align-items: center;
+  gap: var(--space-5);
+}
+
+.predictedIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 76px;
+  height: 76px;
+  border-radius: 24px;
+  background: rgba(37, 99, 235, 0.08);
+  color: var(--color-accent-blue);
+  font-size: 1rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+
+.predictedLabel {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text-tertiary);
+  margin-bottom: var(--space-1);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.predictedCategory {
+  font-size: var(--text-2xl);
+  font-weight: 800;
+  color: var(--color-text-primary);
+}
+
+.predictedRight {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.confidenceValue {
+  font-size: var(--text-3xl);
+  font-weight: 900;
+  font-family: var(--font-mono);
+  color: var(--color-accent-blue);
+}
+
+.confidenceLabel {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-widest);
+  color: var(--color-text-tertiary);
+}
+
+.timeLabel {
+  font-size: var(--text-xs);
+  font-family: var(--font-mono);
+  color: var(--color-text-tertiary);
+  margin-top: var(--space-1);
+}
+
+.scoresGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: var(--space-5);
+}
+
+.scoreCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-height: 160px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(248, 250, 255, 0.98));
+}
+
+.scoreHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.scoreIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 42px;
+  height: 42px;
+  padding: 0 10px;
+  border-radius: 14px;
+  background: rgba(37, 99, 235, 0.08);
+  color: var(--color-accent-blue);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.scoreName {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  flex: 1;
+}
+
+.scoreValue {
+  font-size: var(--text-sm);
+  font-weight: 700;
+  font-family: var(--font-mono);
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  width: fit-content;
+}
+
+@media (max-width: 768px) {
+  .predictedInner {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .predictedRight {
+    align-items: flex-start;
+  }
+}
