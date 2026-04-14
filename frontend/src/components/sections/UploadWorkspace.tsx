@@ -83,6 +83,10 @@ export function UploadWorkspace({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const reducedMotion = usePrefersReducedMotion();
   const dragCounter = useRef(0);
+  const activeDocumentError =
+    documents.find((document) => document.id === activeDocumentId)?.error ??
+    documents.find((document) => document.error)?.error ??
+    null;
 
   const extractClipboardFiles = useCallback((clipboardData: DataTransfer | null) => {
     if (!clipboardData) return [];
@@ -224,7 +228,7 @@ export function UploadWorkspace({
                     ref={fileInputRef}
                     type="file"
                     className="sr-only"
-                    accept=".pdf,.png,.jpg,.jpeg,.tiff,.tif"
+                    accept=".pdf,.png,.jpg,.jpeg,.txt"
                     multiple
                     onChange={handleFileChange}
                     aria-hidden="true"
@@ -263,7 +267,7 @@ export function UploadWorkspace({
                     {isDragging ? 'Release to stage the document' : 'Drag in a document'}
                   </p>
                   <p className={styles.dropzoneHint}>
-                    PDF, PNG, JPG, TIFF - click, drag, or focus here and press Ctrl+V
+                    PDF, PNG, JPG, JPEG, TXT - click, drag, or focus here and press Ctrl+V
                   </p>
                   <p className={styles.dropzonePasteHint}>
                     <span className={styles.pasteKey}>Ctrl+V</span>
@@ -368,6 +372,12 @@ export function UploadWorkspace({
                 )}
 
                 <div className={styles.filePanelFooter}>
+                  {activeDocumentError ? (
+                    <div className={styles.errorBanner} role="alert">
+                      {activeDocumentError}
+                    </div>
+                  ) : null}
+
                   <div className={styles.controlBar}>
                     <Button
                       variant="primary"

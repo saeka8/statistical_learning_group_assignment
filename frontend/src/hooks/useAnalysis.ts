@@ -9,6 +9,7 @@ import { sampleDocuments, type SampleDocument } from '../data/sampleData';
 import { delay, generateId } from '../utils/helpers';
 import { isAuthenticated } from '../services/api';
 import { uploadDocument, pollDocument, deleteDocument } from '../services/documents';
+import { getUserFacingError } from '../services/errorMessages';
 
 interface UseAnalysisReturn {
   documents: UploadedDocument[];
@@ -24,6 +25,22 @@ interface UseAnalysisReturn {
 }
 
 type UploadedDocumentWithSample = UploadedDocument & { _sample?: SampleDocument };
+
+const ALLOWED_UPLOAD_MIME_TYPES = new Set([
+  'application/pdf',
+  'image/png',
+  'image/jpeg',
+  'text/plain',
+]);
+
+function isSupportedUpload(file: File): boolean {
+  if (ALLOWED_UPLOAD_MIME_TYPES.has(file.type)) {
+    return true;
+  }
+
+  const extension = file.name.split('.').pop()?.toLowerCase() ?? '';
+  return ['pdf', 'png', 'jpg', 'jpeg', 'txt'].includes(extension);
+}
 
 export function useAnalysis(): UseAnalysisReturn {
   const [documents, setDocuments] = useState<UploadedDocument[]>([]);
@@ -180,7 +197,7 @@ export function useAnalysis(): UseAnalysisReturn {
         } catch (err) {
           updateDoc(doc.id, {
             status: 'error',
-            error: err instanceof Error ? err.message : 'Upload failed.',
+            error: getUserFacingError(err, 'upload', 'Upload failed.'),
           });
         }
       }
@@ -209,13 +226,20 @@ export function useAnalysis(): UseAnalysisReturn {
                 status: final.status === 'done' ? (isInvoice ? 'extracted' : 'classified') : 'error',
                 classification: final.classification,
                 extraction: final.extraction,
-                error: final.status === 'error' ? 'Analysis failed on the server.' : undefined,
+                error:
+                  final.status === 'error'
+                    ? getUserFacingError(
+                        new Error('Analysis failed on the server.'),
+                        'analysis',
+                        'Analysis failed on the server.'
+                      )
+                    : undefined,
               });
             })
             .catch((err) => {
               updateDoc(localId, {
                 status: 'error',
-                error: err instanceof Error ? err.message : 'Analysis failed.',
+                error: getUserFacingError(err, 'analysis', 'Analysis failed.'),
               });
             })
         )
@@ -232,8 +256,26 @@ export function useAnalysis(): UseAnalysisReturn {
 
     setPhase('uploading');
 
-    const realDocs = idle.filter((d) => d.file !== null);
-    const mockDocs = idle.filter((d) => d.file === null);
+    const unsupportedDocs = idle.filter((doc) => doc.file && !isSupportedUpload(doc.file));
+    unsupportedDocs.forEach((doc) => {
+      updateDoc(doc.id, {
+        status: 'error',
+        error: getUserFacingError(
+          null,
+          'upload',
+          'Supported document types are PDF, PNG, JPG, JPEG, and TXT.'
+        ),
+      });
+    });
+
+    const actionableDocs = idle.filter((doc) => !doc.file || isSupportedUpload(doc.file));
+    if (actionableDocs.length === 0) {
+      setPhase('error');
+      return;
+    }
+
+    const realDocs = actionableDocs.filter((d) => d.file !== null);
+    const mockDocs = actionableDocs.filter((d) => d.file === null);
 
     // Run both in sequence: real first, then mock (they can coexist in the queue)
     if (realDocs.length > 0 && isAuthenticated()) {

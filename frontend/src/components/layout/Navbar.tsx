@@ -1,5 +1,6 @@
 import { AnimatePresence, motion } from 'motion/react';
 import { useEffect, useRef, useState } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Button } from '../common/Button';
 import { AuthDialog, type AuthMode } from './AuthDialog';
 import { useAuth } from '../../hooks/useAuth';
@@ -7,12 +8,15 @@ import styles from './Navbar.module.css';
 
 export function Navbar() {
   const { user, login, register, logout } = useAuth();
+  const location = useLocation();
+  const navigate = useNavigate();
 
   const [scrolled, setScrolled] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [authMode, setAuthMode] = useState<AuthMode>('login');
   const [menuOpen, setMenuOpen] = useState(false);
   const accountMenuRef = useRef<HTMLDivElement | null>(null);
+  const pendingReturnPathRef = useRef<string | null>(null);
 
   useEffect(() => {
     const handler = () => setScrolled(window.scrollY > 20);
@@ -46,6 +50,26 @@ export function Navbar() {
     setMenuOpen(false);
     setDialogOpen(false);
   }, [user]);
+
+  useEffect(() => {
+    if (user) return;
+
+    const state = location.state as { authIntent?: string; from?: string } | null;
+    if (state?.authIntent !== 'login') return;
+
+    pendingReturnPathRef.current = state.from ?? '/workspace';
+    setAuthMode('login');
+    setDialogOpen(true);
+    navigate(location.pathname, { replace: true, state: null });
+  }, [location.pathname, location.state, navigate, user]);
+
+  useEffect(() => {
+    if (!user || !pendingReturnPathRef.current) return;
+
+    const returnTo = pendingReturnPathRef.current;
+    pendingReturnPathRef.current = null;
+    navigate(returnTo, { replace: true });
+  }, [navigate, user]);
 
   const openAuth = (mode: AuthMode) => {
     setAuthMode(mode);
@@ -112,6 +136,15 @@ export function Navbar() {
                     <div className={styles.menuHeader}>
                       <p className={styles.menuName}>{user.displayName}</p>
                       <p className={styles.menuEmail}>{user.email}</p>
+                    </div>
+                    <div className={styles.menuActions}>
+                      <Link
+                        to="/workspace"
+                        className={styles.menuLink}
+                        onClick={() => setMenuOpen(false)}
+                      >
+                        Workspace
+                      </Link>
                     </div>
                     <button
                       type="button"

@@ -1,0 +1,148 @@
+.details {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.eyebrow {
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--color-accent-blue);
+  margin-bottom: 0.3rem;
+}
+
+.title {
+  font-size: clamp(1.4rem, 2.4vw, 1.9rem);
+  letter-spacing: -0.05em;
+}
+
+.stack {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.summaryCard,
+.sectionCard,
+.emptyState {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.summaryHeader,
+.sectionHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.filename {
+  font-size: 1.25rem;
+  letter-spacing: -0.05em;
+}
+
+.subtitle {
+  margin-top: 0.25rem;
+  color: var(--color-text-secondary);
+  font-size: 0.86rem;
+}
+
+.metaGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.metaBlock,
+.field {
+  padding: 0.9rem 0.95rem;
+  border-radius: 18px;
+  border: 1px solid rgba(16, 24, 32, 0.07);
+  background: rgba(255, 255, 255, 0.65);
+}
+
+.metaLabel,
+.fieldLabel {
+  display: block;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--color-text-tertiary);
+}
+
+.metaValue,
+.fieldValue {
+  display: block;
+  margin-top: 0.35rem;
+  color: var(--color-text-primary);
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.sectionTitle {
+  font-size: 1rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+}
+
+.classificationMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  color: var(--color-text-tertiary);
+  font-size: 0.8rem;
+}
+
+.scoreList {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.fieldGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.emptyTitle {
+  font-size: 1.05rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+}
+
+.emptyText {
+  color: var(--color-text-secondary);
+  line-height: 1.7;
+}
+
+@media (max-width: 720px) {
+  .header,
+  .summaryHeader,
+  .sectionHeader {
+    align-items: flex-start;
+  }
+
+  .metaGrid,
+  .fieldGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .actions {
+    flex-direction: column;
+  }
+}

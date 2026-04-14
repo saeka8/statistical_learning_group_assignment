@@ -30,6 +30,9 @@ export interface BackendDocument {
   file_size: number;
   status: 'pending' | 'processing' | 'done' | 'error';
   created_at: string;
+  updated_at?: string;
+  label?: string | null;
+  confidence?: number | null;
   classification: BackendClassification | null;
   invoice_data: BackendInvoiceData | null;
 }
@@ -83,7 +86,13 @@ function mapExtraction(e: BackendInvoiceData): InvoiceExtractionResult {
 export interface DocumentResult {
   backendId: string;
   filename: string;
+  contentType: string;
+  fileSize: number;
   status: BackendDocument['status'];
+  createdAt: string;
+  updatedAt: string;
+  label?: string | null;
+  confidence?: number | null;
   classification: ClassificationResult | undefined;
   extraction: InvoiceExtractionResult | undefined;
 }
@@ -92,7 +101,13 @@ function mapDocument(d: BackendDocument): DocumentResult {
   return {
     backendId: d.id,
     filename: d.filename,
+    contentType: d.content_type,
+    fileSize: d.file_size,
     status: d.status,
+    createdAt: d.created_at,
+    updatedAt: d.updated_at ?? d.created_at,
+    label: d.label ?? d.classification?.predicted_label ?? null,
+    confidence: d.confidence ?? d.classification?.confidence ?? null,
     classification: d.classification ? mapClassification(d.classification) : undefined,
     extraction: d.invoice_data ? mapExtraction(d.invoice_data) : undefined,
   };
@@ -114,6 +129,15 @@ export async function getDocument(id: string): Promise<DocumentResult> {
 
 export async function deleteDocument(id: string): Promise<void> {
   await api.del(`/documents/${id}/`);
+}
+
+export async function downloadDocument(id: string): Promise<string> {
+  const data = await api.get<{ url: string }>(`/documents/${id}/download/`);
+  return data.url;
+}
+
+export async function rerunDocumentAnalysis(id: string): Promise<void> {
+  await api.post(`/documents/${id}/classify/`);
 }
 
 /**

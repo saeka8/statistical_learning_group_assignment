@@ -3,6 +3,7 @@ import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { usePrefersReducedMotion } from '../../hooks/usePrefersReducedMotion';
 import { ApiRequestError } from '../../services/api';
+import { getUserFacingError } from '../../services/errorMessages';
 import { Button } from '../common/Button';
 import styles from './AuthDialog.module.css';
 
@@ -116,7 +117,7 @@ export function AuthDialog({
       return;
     }
 
-    setGeneralError(err instanceof Error ? err.message : fallbackMessage);
+    setGeneralError(getUserFacingError(err, 'auth', fallbackMessage));
   };
 
   const handleLoginSubmit = async (event: FormEvent<HTMLFormElement>) => {

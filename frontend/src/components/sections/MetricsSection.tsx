@@ -76,4 +76,7 @@ export function MetricsSection() {
             </div>
           </div>
         </SectionReveal>
-      </Con
+      </Container>
+    </section>
+  );
+}
