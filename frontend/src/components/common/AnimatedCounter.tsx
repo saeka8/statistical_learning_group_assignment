@@ -19,10 +19,10 @@ export function AnimatedCounter({
   const [current, setCurrent] = useState(0);
   const reducedMotion = usePrefersReducedMotion();
   const frameRef = useRef<number>(0);
+  const displayValue = reducedMotion ? target : current;
 
   useEffect(() => {
     if (reducedMotion) {
-      setCurrent(target);
       return;
     }
 
@@ -42,7 +42,7 @@ export function AnimatedCounter({
 
   return (
     <span className={className} aria-label={`${target.toFixed(decimals)}${suffix}`}>
-      {current.toFixed(decimals)}
+      {displayValue.toFixed(decimals)}
       {suffix}
     </span>
   );

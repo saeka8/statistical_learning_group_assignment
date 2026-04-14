@@ -23,7 +23,30 @@ dist/
 .env
 .env.*
 
+.claude/
+.vscode/
+.idea/
+
 .DS_Store
 Thumbs.db
 
 node_modules/
+
+# Local agent / brainstorming artifacts
+.superpowers/
+docs/superpowers/
+
+# Playwright test artifacts
+frontend/test-results/
+frontend/playwright-report/
+
+# YOLO training artifacts (data lives on shared drive)
+# TODO: also ignore best.pt once moved to shared drive
+Feature_Extraction_Invoice/train/
+Feature_Extraction_Invoice/yolo_dataset/images/
+Feature_Extraction_Invoice/yolo_dataset/labels/
+Feature_Extraction_Invoice/yolo_dataset/**/*.cache
+Feature_Extraction_Invoice/runs/**/weights/last.pt
+Feature_Extraction_Invoice/runs/**/train_batch*.jpg
+Feature_Extraction_Invoice/runs/**/labels.jpg
+Feature_Extraction_Invoice/label_previews/

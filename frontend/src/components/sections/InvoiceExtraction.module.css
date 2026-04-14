@@ -8,22 +8,51 @@
 }
 
 .title {
-  font-size: var(--text-3xl);
-  font-weight: 800;
+  font-size: clamp(2.1rem, 4vw, 3.1rem);
+  font-weight: 700;
 }
 
 .subtitle {
-  font-size: var(--text-base);
+  font-size: 1rem;
   color: var(--color-text-secondary);
-  max-width: 620px;
-  line-height: 1.8;
+  max-width: 40rem;
+  line-height: 1.82;
+}
+
+.documentContext {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.8rem;
+  flex-wrap: wrap;
+  padding: 0.7rem 1rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid rgba(91, 151, 172, 0.12);
+  box-shadow: 0 16px 30px rgba(16, 24, 32, 0.06);
+}
+
+.documentContextLabel {
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--color-text-tertiary);
+}
+
+.documentContextName {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--color-text-primary);
 }
 
 .fieldsGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: var(--space-5);
-  margin-bottom: var(--space-8);
+}
+
+.featuredField {
+  grid-column: span 2;
 }
 
 .fieldCard {
@@ -31,15 +60,16 @@
   flex-direction: column;
   gap: var(--space-3);
   min-height: 170px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(255, 250, 242, 0.98));
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.97), rgba(241, 245, 248, 0.98));
 }
 
 .fieldCardEmphasis {
   background:
-    radial-gradient(circle at top right, rgba(239, 170, 79, 0.16), transparent 30%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(255, 248, 236, 0.98));
-  border-color: rgba(217, 139, 43, 0.22);
-  box-shadow: 0 20px 38px rgba(16, 33, 50, 0.12);
+    radial-gradient(circle at top right, rgba(91, 151, 172, 0.14), transparent 30%),
+    radial-gradient(circle at bottom left, rgba(171, 134, 90, 0.08), transparent 30%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(241, 245, 248, 0.98));
+  border-color: rgba(91, 151, 172, 0.16);
+  box-shadow: 0 24px 44px rgba(16, 24, 32, 0.12);
 }
 
 .fieldHeader {
@@ -50,32 +80,41 @@
 
 .fieldLabel {
   font-size: var(--text-xs);
-  font-weight: 600;
+  font-weight: 800;
   text-transform: uppercase;
   letter-spacing: var(--tracking-widest);
   color: var(--color-text-tertiary);
 }
 
 .fieldValue {
-  font-size: var(--text-xl);
+  font-size: clamp(1.15rem, 2vw, 1.45rem);
   font-weight: 700;
   color: var(--color-text-primary);
   font-family: var(--font-mono);
   word-break: break-word;
 }
 
-.summary {
-  max-width: 760px;
-  margin: 0 auto;
+@media (max-width: 1080px) {
+  .fieldsGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .featuredField {
+    grid-column: span 2;
+  }
 }
 
-.summaryText {
-  font-size: var(--text-sm);
-  color: var(--color-text-secondary);
-  line-height: 1.85;
-  text-align: center;
-}
+@media (max-width: 700px) {
+  .documentContext {
+    align-items: flex-start;
+    border-radius: 22px;
+  }
 
-.summaryText strong {
-  color: var(--color-text-primary);
+  .fieldsGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .featuredField {
+    grid-column: span 1;
+  }
 }

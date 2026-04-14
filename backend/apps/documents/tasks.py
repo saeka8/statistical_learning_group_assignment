@@ -22,40 +22,33 @@ def run_classification(document_id: str) -> None:
     doc.save(update_fields=["status"])
 
     try:
-        # TODO: replace stub with actual ML pipeline once confirmed
-        # from ml.classifier import classify
-        # result = classify(doc.storage_key, doc.content_type)
+        from ml.classifier import classify
 
-        # --- Stub result ---
-        predicted_label = "unknown"
-        confidence = 0.0
-        all_scores = {
-            "invoice": 0.0,
-            "email": 0.0,
-            "scientific_publication": 0.0,
-            "resume": 0.0,
-            "unknown": 1.0,
-        }
-        model_version = "stub"
-        # -------------------
+        result = classify(doc.storage_key, doc.content_type)
 
         ClassificationResult.objects.update_or_create(
             document=doc,
             defaults={
-                "predicted_label": predicted_label,
-                "confidence": confidence,
-                "all_scores": all_scores,
-                "model_version": model_version,
+                "predicted_label": result["predicted_label"],
+                "confidence": result["confidence"],
+                "all_scores": result["all_scores"],
+                "model_version": result["model_version"],
             },
         )
 
-        doc.status = DocumentStatus.DONE
-        doc.save(update_fields=["status"])
-
         logger.info(
             "Document %s classified as '%s' (confidence %.2f).",
-            document_id, predicted_label, confidence,
+            document_id, result["predicted_label"], result["confidence"],
         )
+
+        # Automatically enqueue extraction for invoices
+        if result["predicted_label"] == "invoice":
+            from django_q.tasks import async_task
+            async_task("apps.documents.tasks.run_extraction", str(doc.id))
+            # Status stays PROCESSING until extraction completes
+        else:
+            doc.status = DocumentStatus.DONE
+            doc.save(update_fields=["status"])
 
     except Exception as exc:
         logger.exception("Classification failed for document %s: %s", document_id, exc)
@@ -66,9 +59,10 @@ def run_classification(document_id: str) -> None:
 
 def run_extraction(document_id: str) -> None:
     """
-    Async task: extract structured fields from an invoice document.
+    Async task: extract structured fields from an invoice using YOLO + OCR.
 
     Automatically enqueued by run_classification when predicted_label == 'invoice'.
+    Can also be triggered manually via POST /api/documents/{id}/classify/
     """
     from .models import Document, DocumentStatus, InvoiceExtraction
 
@@ -79,25 +73,24 @@ def run_extraction(document_id: str) -> None:
         return
 
     try:
-        # TODO: replace stub with actual extraction pipeline once confirmed
-        # from ml.extractor import extract_invoice_fields
-        # fields = extract_invoice_fields(doc.storage_key, doc.content_type)
+        from ml.extractor import extract_invoice_fields
 
-        # --- Stub result ---
-        fields = {
-            "invoice_number": "",
-            "invoice_date": None,
-            "due_date": None,
-            "issuer_name": "",
-            "recipient_name": "",
-            "total_amount": None,
-            "currency": "",
-            "raw_text": "",
-            "confidence_map": {},
-        }
-        # -------------------
+        fields = extract_invoice_fields(doc.storage_key, doc.content_type)
 
-        InvoiceExtraction.objects.update_or_create(document=doc, defaults=fields)
+        InvoiceExtraction.objects.update_or_create(
+            document=doc,
+            defaults={
+                "invoice_number":  fields["invoice_number"],
+                "invoice_date":    fields["invoice_date"],
+                "due_date":        fields["due_date"],
+                "issuer_name":     fields["issuer_name"],
+                "recipient_name":  fields["recipient_name"],
+                "total_amount":    fields["total_amount"],
+                "currency":        fields["currency"],
+                "raw_text":        fields["raw_text"],
+                "confidence_map":  fields["confidence_map"],
+            },
+        )
 
         doc.status = DocumentStatus.DONE
         doc.save(update_fields=["status"])

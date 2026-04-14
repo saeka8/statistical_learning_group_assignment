@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find /c/Users/oskar/Projects/statistical_learning_group_assignment -type f -name \"*.py\" -exec wc -l {} \\\\;)",
+      "Bash(ls -la /c/Users/oskar/Projects/statistical_learning_group_assignment/*.md)",
+      "Bash(xargs grep:*)",
+      "Bash(node ./node_modules/typescript/bin/tsc --noEmit)",
+      "Bash(node node_modules/typescript/bin/tsc --noEmit)",
+      "Bash(node_modules/.bin/tsc --noEmit)",
+      "Bash(echo \"exit:$?\")"
+    ]
+  }
+}
