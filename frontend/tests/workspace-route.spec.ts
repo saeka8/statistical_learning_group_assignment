@@ -1,10 +1,52 @@
 import { expect, test } from '@playwright/test';
 
-test('guests are redirected away from the workspace route', async ({ page }) => {
+test('guests are redirected away from the workspace route and can continue after login', async ({
+  page,
+}) => {
+  await page.route('**/api/auth/token/**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        data: {
+          access: 'workspace-access-token',
+          refresh: 'workspace-refresh-token',
+        },
+      }),
+    });
+  });
+
+  await page.route('**/api/profile/**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        data: {
+          username: 'ada',
+          email: 'ada@example.com',
+          profile: {
+            display_name: 'Ada Lovelace',
+            avatar_url: '',
+            created_at: '2026-04-14T00:00:00.000Z',
+          },
+        },
+      }),
+    });
+  });
+
   await page.goto('/workspace');
 
   await expect(page).toHaveURL(/\/$/);
-  await expect(page.getByRole('button', { name: /^log in$/i })).toBeVisible();
+
+  const dialog = page.getByRole('dialog', { name: /log in to doclens/i });
+  await expect(dialog).toBeVisible();
+
+  await dialog.getByLabel(/username/i).fill('ada');
+  await dialog.getByLabel(/^password$/i).fill('secret-password');
+  await dialog.getByRole('button', { name: /sign in/i }).click();
+
+  await expect(page).toHaveURL(/\/workspace$/);
+  await expect(page.getByRole('heading', { name: 'Workspace' })).toBeVisible();
 });
 
 test('authenticated users can open the workspace route', async ({ page }) => {
