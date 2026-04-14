@@ -1,11 +1,17 @@
 import magic
 from django.conf import settings
+from django.db.models import Count, Sum
 from rest_framework import generics, permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .models import Document, DocumentStatus, InvoiceExtraction
-from .serializers import DocumentListSerializer, DocumentDetailSerializer, InvoiceExtractionSerializer
+from .serializers import (
+    DocumentListSerializer,
+    DocumentDetailSerializer,
+    InvoiceExtractionSerializer,
+    WorkspaceSummarySerializer,
+)
 from .storage import upload_file, delete_file, generate_presigned_url
 from .filters import apply_document_filters
 from apps.core.pagination import StandardPagination
@@ -79,6 +85,65 @@ class DocumentDetailView(generics.RetrieveDestroyAPIView):
         delete_file(doc.storage_key)
         doc.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class WorkspaceSummaryView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        queryset = Document.objects.filter(owner=request.user).select_related(
+            "classification",
+            "invoice_data",
+        )
+
+        totals = {
+            "uploads": queryset.count(),
+            "processed": queryset.filter(status=DocumentStatus.DONE).count(),
+            "errors": queryset.filter(status=DocumentStatus.ERROR).count(),
+            "invoices": queryset.filter(classification__predicted_label="invoice").count(),
+        }
+
+        dominant = (
+            queryset.filter(classification__isnull=False)
+            .values("classification__predicted_label")
+            .annotate(total=Count("id"))
+            .order_by("-total")
+            .first()
+        )
+        dominant_label = None
+        if dominant:
+            dominant_label = {
+                "value": dominant["classification__predicted_label"],
+                "count": dominant["total"],
+            }
+
+        invoice_total = (
+            queryset.filter(invoice_data__total_amount__isnull=False)
+            .aggregate(total=Sum("invoice_data__total_amount"))
+            .get("total")
+        )
+
+        recent_activity = [
+            {
+                "id": doc.id,
+                "filename": doc.filename,
+                "status": doc.status,
+                "label": getattr(getattr(doc, "classification", None), "predicted_label", None),
+                "confidence": getattr(getattr(doc, "classification", None), "confidence", None),
+                "created_at": doc.created_at,
+            }
+            for doc in queryset[:5]
+        ]
+
+        serializer = WorkspaceSummarySerializer(
+            {
+                "totals": totals,
+                "dominant_label": dominant_label,
+                "recent_invoice_total": str(invoice_total) if invoice_total is not None else None,
+                "recent_activity": recent_activity,
+            }
+        )
+        return Response(serializer.data)
 
 
 class DocumentDownloadView(APIView):
