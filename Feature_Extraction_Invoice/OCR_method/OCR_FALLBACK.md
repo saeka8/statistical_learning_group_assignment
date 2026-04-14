@@ -90,7 +90,7 @@ If you want to use Tesseract:
 Run on one invoice image:
 
 ```bash
-python3 Feature_Extraction_Invoice/extract_invoice_ocr.py --image path/to/invoice.jpg --pretty
+python3 Feature_Extraction_Invoice/OCR_method/extract_invoice_ocr.py --image path/to/invoice.jpg --pretty
 ```
 
 Use a specific engine:

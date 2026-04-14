@@ -123,31 +123,34 @@ Each row defines:
 
 We added a visualization script:
 
-- `Feature_Extraction_Invoice/visualize_labels.py`
+- `Feature_Extraction_Invoice/Dataset_verification/visualize_labels.py`
 
 This can be used to inspect how fields are labeled on the invoices before training.
 
 Example:
 
 ```bash
-python3 Feature_Extraction_Invoice/visualize_labels.py --sample 5
-python3 Feature_Extraction_Invoice/visualize_labels.py --image 671_png_jpg.rf.p73UNqF5SQDjw12vTAI6.jpg --open
+python3 Feature_Extraction_Invoice/Dataset_verification/visualize_labels.py --sample 5
+python3 Feature_Extraction_Invoice/Dataset_verification/visualize_labels.py --image 671_png_jpg.rf.p73UNqF5SQDjw12vTAI6.jpg --open
 ```
 
 ## Method Files
 
-Method entry points are grouped under:
+The project is currently organized into method-specific folders:
 
-- `Feature_Extraction_Invoice/methods/`
+- `Feature_Extraction_Invoice/YOLO_method/`
+- `Feature_Extraction_Invoice/OCR_method/`
+- `Feature_Extraction_Invoice/Dataset_verification/`
 
-Available wrappers:
+Main entry points:
 
-- `methods/train_yolo.py`
-- `methods/run_overnight_yolo.sh`
-- `methods/extract_invoice_ocr.py`
-- `methods/visualize_labels.py`
-
-The original top-level scripts remain available too.
+- `YOLO_method/train_yolo.py`
+- `YOLO_method/run_overnight_yolo.sh`
+- `YOLO_method/predict_invoice_yolo.py`
+- `OCR_method/extract_invoice_ocr.py`
+- `OCR_method/OCR_FALLBACK.md`
+- `OCR_method/requirements_ocr.txt`
+- `Dataset_verification/visualize_labels.py`
 
 ## Planned Pipeline
 
@@ -233,7 +236,7 @@ If needed later, a language model can still be added as a refinement stage, but 
 
 We also implemented a rule-based OCR-first fallback:
 
-- `Feature_Extraction_Invoice/extract_invoice_ocr.py`
+- `Feature_Extraction_Invoice/OCR_method/extract_invoice_ocr.py`
 
 This fallback:
 
@@ -270,7 +273,7 @@ This matters because good bounding boxes do not automatically imply good OCR res
 
 ## Practical Project Plan
 
-1. Verify annotations visually with `visualize_labels.py`
+1. Verify annotations visually with `Feature_Extraction_Invoice/Dataset_verification/visualize_labels.py`
 2. Convert the dataset into the format required by the chosen detector
 3. Train a field detection model
 4. Run inference on test invoices
