@@ -88,6 +88,7 @@ async function request<T>(
 ): Promise<T> {
   const token = getAccessToken();
   const headers: Record<string, string> = {};
+  const isAuthHandshakePath = path.startsWith('/auth/token/') || path.startsWith('/auth/register/');
 
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
@@ -108,7 +109,7 @@ async function request<T>(
   });
 
   // Expired token — try to refresh once, then retry the original request
-  if (res.status === 401 && !isRetry) {
+  if (res.status === 401 && !isRetry && token && !isAuthHandshakePath) {
     const refreshed = await refreshAccessToken();
     if (refreshed) {
       return request<T>(method, path, body, true);
