@@ -4,6 +4,7 @@ test('guests are redirected away from the workspace route', async ({ page }) => 
   await page.goto('/workspace');
 
   await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByRole('button', { name: /^log in$/i })).toBeVisible();
 });
 
 test('authenticated users can open the workspace route', async ({ page }) => {
