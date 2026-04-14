@@ -2,7 +2,7 @@
 
 **Course:** IA: Statistical Learning and Prediction — IE University
 
-A full-stack web application that classifies scanned documents into 4 categories and extracts structured fields from invoices using only traditional ML techniques (no deep learning, no generative AI).
+A full-stack web application that classifies scanned documents into 4 categories and extracts structured fields from invoices using traditional ML and computer vision techniques (no generative AI).
 
 ---
 
@@ -25,22 +25,40 @@ A hybrid NLP + Computer Vision approach:
 
 1. **OCR** — Tesseract extracts text from scanned document images
 2. **Text features** — TF-IDF vectorizer (500 features, unigrams + bigrams)
-3. **Image features** — 33 handcrafted features (HOG descriptors, 4x4 text density grid, whitespace ratios, Sobel edge features, margin detection)
-4. **Combined** — 533 features, StandardScaler normalized
+3. **Image features** — 33 handcrafted features (HOG descriptors, 4×4 text density grid, whitespace ratios, Sobel edge features, margin detection)
+4. **Combined** — 533 features, StandardScaler normalised
 5. **Classifier** — Random Forest (200 trees, GridSearchCV-tuned)
 
 Ablation study: hybrid (87.5%) > text-only (82.5%) > image-only (63.8%).
 
-### Invoice Extraction
+**Stored models:**
+```
+backend/ml/models/classifier.pkl         # trained Random Forest
+backend/ml/models/tfidf_vectorizer.pkl   # fitted TF-IDF vectorizer
+```
 
-Rule-based field extraction using cascading regex patterns:
+### Invoice Field Extraction (~37% field completeness on SROIE test set)
 
-- **Invoice number** — pattern matching with fallback specificity
-- **Dates** — multi-format support (DD/MM/YYYY, Month DD YYYY, ISO, etc.)
-- **Total amount** — 6-pass search (grand total, incl GST, subtotal filtering, comma-decimal, currency symbols)
-- **Issuer/recipient** — company suffix detection + positional heuristics
-- **Currency** — symbol and ISO code detection (USD, EUR, GBP, etc.)
-- **Confidence map** — heuristic per-field confidence scores
+When a document is classified as an invoice, a second pipeline runs automatically to extract structured fields using **YOLOv8** object detection:
+
+1. **Page rendering** — PyMuPDF converts PDFs to images; PNGs/JPEGs loaded directly
+2. **YOLO inference** — fine-tuned YOLOv8 model detects bounding boxes for 15 field classes (trained on SROIE / ICDAR 2019, ~1,000 annotated invoice images)
+3. **Region OCR** — Tesseract reads text from each detected crop
+4. **Post-processing** — date parsing, amount normalisation, currency detection
+5. **Structured output** — invoice number, invoice date, due date, issuer name, recipient name, total amount, currency
+
+**Stored model:**
+```
+backend/ml/models/yolo_invoice.pt        # YOLOv8 weights (fine-tuned on SROIE)
+```
+
+**End-to-end flow:**
+```
+Upload → run_classification task → ClassificationResult saved
+                                 ↘ if invoice → run_extraction task → InvoiceExtraction saved
+```
+
+Both tasks run asynchronously in the background worker. The frontend polls until the document status becomes `done`.
 
 ---
 
@@ -50,12 +68,42 @@ Rule-based field extraction using cascading regex patterns:
 |---|---|
 | Backend | Django 5.x + Django REST Framework |
 | Frontend | React 19 + TypeScript + Vite |
-| Task Queue | django-q2 (PostgreSQL broker) |
+| Task Queue | django-q2 (PostgreSQL broker — no Redis needed) |
 | Database | PostgreSQL 16 |
-| File Storage | MinIO (S3-compatible) |
+| File Storage | MinIO (S3-compatible) via boto3 |
 | Auth | JWT (djangorestframework-simplejwt) |
-| ML | scikit-learn, scikit-image, pytesseract, Pillow |
-| Containerization | Docker + Docker Compose |
+| Classification ML | scikit-learn, scikit-image, pytesseract, numpy, scipy |
+| Extraction ML | ultralytics (YOLOv8), PyMuPDF, Pillow, pytesseract |
+| Containerisation | Docker + Docker Compose |
+
+---
+
+## Architecture
+
+```
+┌─────────────────┐     HTTP/JWT      ┌──────────────────────┐
+│  React Frontend │ ◄────────────────► │  Django REST API     │
+│  (Vite + TS)    │   /api/* proxy    │  (DRF + simplejwt)   │
+└─────────────────┘                   └──────────┬───────────┘
+                                                  │ enqueue task
+                                      ┌───────────▼───────────┐
+                                      │  Django Q2 Worker     │
+                                      │  (qcluster)           │
+                                      └──────────┬────────────┘
+                                                  │
+                              ┌───────────────────┼──────────────────┐
+                              ▼                   ▼                  ▼
+                    ┌──────────────┐   ┌──────────────────┐  ┌──────────────┐
+                    │  PostgreSQL  │   │  MinIO (S3)      │  │  ML Models   │
+                    │  (metadata   │   │  (file storage)  │  │  pkl + .pt   │
+                    │   + task Q)  │   └──────────────────┘  └──────────────┘
+                    └──────────────┘
+```
+
+- Django Q2 uses PostgreSQL as its message broker — no Redis required
+- All uploads go to MinIO; downloads use presigned URLs (300 s TTL)
+- JWT access tokens (15 min) + rotating refresh tokens (7 days)
+- All API responses are envelope-wrapped: `{"data": ...}` for success, `{"error": {...}}` for errors
 
 ---
 
@@ -65,12 +113,14 @@ Rule-based field extraction using cascading regex patterns:
 
 - [Docker Engine](https://docs.docker.com/engine/install/) (or Docker Desktop)
 - `docker compose` plugin (`docker compose version` should work)
-- `make` — install with `sudo apt install make` on Linux/WSL
-- [Tesseract OCR](https://github.com/UB-Mannheim/tesseract/wiki) installed and on PATH
+- `make` — `sudo apt install make` on Linux/WSL
+- Node.js 20+ (for the frontend)
+
+> Tesseract OCR is installed **inside the Docker image** — you do not need it on your host machine.
 
 ### First-time setup
 
-**1. Clone the repo and enter the directory**
+**1. Clone and enter the directory**
 ```bash
 git clone <repo-url>
 cd statistical_learning_group_assignment
@@ -80,42 +130,34 @@ cd statistical_learning_group_assignment
 ```bash
 cp .env.example .env
 ```
-Open `.env` and set a real value for `SECRET_KEY`. Everything else can stay as-is for local development.
+Set a real value for `SECRET_KEY`. Everything else works as-is for local development.
 
 **3. Start all services**
 ```bash
 make up
 ```
-This builds the Docker images and starts PostgreSQL, MinIO, the Django API, and the background worker.
+Builds the Docker images (includes Tesseract + all ML dependencies) and starts PostgreSQL, MinIO, the Django API, and the background worker.
 
-**4. Run database migrations**
+**4. Run database migrations** *(first run only)*
 ```bash
 make migrate
 ```
 
-**5. Create an admin user** *(optional but useful)*
+**5. Start the frontend**
 ```bash
-make createsuperuser
+cd frontend
+npm install   # first run only
+npm run dev
 ```
 
-The API is now available at `http://localhost:8000/api/`
-The Django admin panel is at `http://localhost:8000/admin/`
-The MinIO console is at `http://localhost:9001` (login with `MINIO_USER` / `MINIO_PASSWORD` from your `.env`)
+Open **http://localhost:5173** — sign up, upload a document, and click **Analyze**.
 
----
-
-### Running the standalone ML pipeline
-
-You can also run the classification pipeline directly without the web app:
-
-```bash
-pip install -r requirements.txt
-cd src
-python pipeline.py --demo                    # Classify sample images from demo_images/
-python pipeline.py path/to/document.png      # Classify a single document
-```
-
-Requires Tesseract OCR installed and on PATH.
+| Service | URL |
+|---|---|
+| Frontend | http://localhost:5173 |
+| API | http://localhost:8000/api/ |
+| Django admin | http://localhost:8000/admin/ |
+| MinIO console | http://localhost:9001 |
 
 ---
 
@@ -128,21 +170,51 @@ Requires Tesseract OCR installed and on PATH.
 | `make logs` | Tail logs for the API and worker |
 | `make migrate` | Run pending database migrations |
 | `make shell` | Open a Django shell inside the container |
-| `make test` | Run the test suite |
-| `make lint` | Run the linter |
+| `make lint` | Run the linter (ruff) |
+
+Watch the worker execute classification tasks in real time:
+```bash
+docker compose logs worker -f
+```
+
+### Without `make`
+
+```bash
+docker compose up --build -d
+docker compose exec api python manage.py migrate
+docker compose logs -f api worker
+docker compose down
+```
 
 ---
 
-### Without make
+## API Endpoints
 
-If you don't have `make` installed you can run the underlying commands directly:
+All endpoints are prefixed `/api/`. Authenticated routes require `Authorization: Bearer <access_token>`.
 
-```bash
-docker compose up --build -d       # make up
-docker compose exec api python manage.py migrate   # make migrate
-docker compose logs -f api worker  # make logs
-docker compose down                # make down
-```
+### Auth
+
+| Method | Path | Description |
+|---|---|---|
+| `POST` | `/auth/register/` | Create account |
+| `POST` | `/auth/token/` | Login → access + refresh tokens |
+| `POST` | `/auth/token/refresh/` | Refresh access token |
+| `GET/PATCH` | `/profile/` | Get or update profile |
+
+### Documents
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/documents/` | List your documents (paginated) |
+| `POST` | `/documents/` | Upload a file (multipart/form-data) |
+| `GET` | `/documents/{id}/` | Full detail — includes classification + extraction |
+| `DELETE` | `/documents/{id}/` | Delete document and file from storage |
+| `GET` | `/documents/{id}/download/` | Presigned download URL |
+| `POST` | `/documents/{id}/classify/` | Re-trigger classification manually |
+| `GET` | `/documents/{id}/classify/status/` | Poll classification status |
+| `GET` | `/documents/{id}/extraction/` | Invoice extraction fields |
+
+**Document status lifecycle:** `pending → processing → done` (or `error`)
 
 ---
 
@@ -150,25 +222,24 @@ docker compose down                # make down
 
 ```
 .
-├── backend/                    # Django REST API
+├── backend/
 │   ├── apps/
-│   │   ├── documents/          # Upload, classify, extract endpoints
-│   │   └── users/              # Auth + profiles
-│   ├── ml/                     # ML pipeline (no Django dependency)
-│   │   ├── classifier.py       # Hybrid NLP+CV classifier
-│   │   ├── extractor.py        # Regex-based invoice field extractor
-│   │   └── models/             # Trained .pkl files
-│   └── config/                 # Django settings
-├── frontend/                   # React + TypeScript UI
+│   │   ├── core/           # ApiRenderer, exception handler, pagination
+│   │   ├── documents/      # Upload, classify, extract endpoints + async tasks
+│   │   └── users/          # Registration, JWT auth, profiles
+│   ├── ml/
+│   │   ├── classifier.py   # OCR → TF-IDF + image features → Random Forest
+│   │   ├── extractor.py    # YOLOv8 inference → Tesseract OCR → field mapping
+│   │   └── models/         # classifier.pkl, tfidf_vectorizer.pkl, yolo_invoice.pt
+│   ├── config/             # Django settings (base / development / production)
+│   └── Dockerfile          # Includes Tesseract, libmagic, ML dependencies
+├── frontend/
 │   └── src/
-│       ├── components/         # UI components (upload, results, pipeline viz)
-│       ├── data/               # Sample/mock data
-│       └── hooks/              # State management
-├── src/                        # Standalone ML pipeline
-│   └── pipeline.py             # CLI tool for classification + extraction
-├── models/                     # Trained model files
-├── processed_data/             # TF-IDF vectorizer, OCR results, features
-├── demo_images/                # Sample test images (unseen by model)
+│       ├── services/       # api.ts, auth.ts, documents.ts — typed backend client
+│       ├── hooks/          # useAuth, useAnalysis
+│       ├── components/     # Upload workspace, classification results, invoice extraction
+│       └── types/          # TypeScript type definitions
 ├── docker-compose.yml
-└── requirements.txt            # Python deps for standalone pipeline
+├── Makefile
+└── .env.example
 ```

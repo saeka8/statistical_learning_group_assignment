@@ -335,4 +335,44 @@ export function UploadWorkspace({
                     )}
                   </div>
 
-                  <div className={styles.workspaceDock
+                  <div className={styles.workspaceDock}>
+                    <div className={styles.workspaceDockHeader}>
+                      <div>
+                        <span className={styles.workspaceDockEyebrow}>Workflow</span>
+                        <h4 className={styles.workspaceDockTitle}>{phaseMessage}</h4>
+                        <p className={styles.workspaceDockMeta}>{stagedSummary}</p>
+                      </div>
+                      <div className={styles.workspaceDial}>
+                        <span className={styles.workspaceDialValue}>{documents.length}</span>
+                        <span className={styles.workspaceDialLabel}>Files</span>
+                      </div>
+                    </div>
+
+                    <div className={styles.phaseIndicator}>
+                      <div className={styles.phaseBar}>
+                        <div
+                          className={styles.phaseFill}
+                          style={{ width: phaseProgress[phase] }}
+                        />
+                      </div>
+                      <span className={styles.phaseLabel}>{phase.replace(/_/g, ' ')}</span>
+                    </div>
+
+                    <div className={styles.workspaceSignals}>
+                      {workflowSignals.map((sig) => (
+                        <div key={sig.label} className={styles.workspaceSignal}>
+                          <span className={styles.workspaceSignalLabel}>{sig.label}</span>
+                          <span className={styles.workspaceSignalValue}>{sig.value}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </Card>
+            </div>
+          </div>
+        </SectionReveal>
+      </Container>
+    </section>
+  );
+}

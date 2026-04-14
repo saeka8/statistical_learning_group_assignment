@@ -1,31 +1,16 @@
 import { AnimatePresence, motion } from 'motion/react';
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '../common/Button';
-import { AuthDialog, type AuthMode, type PreviewAccountPayload } from './AuthDialog';
+import { AuthDialog, type AuthMode } from './AuthDialog';
+import { useAuth } from '../../hooks/useAuth';
 import styles from './Navbar.module.css';
 
-interface PreviewAccount {
-  displayName: string;
-  email: string;
-  initials: string;
-}
-
-function getInitials(value: string): string {
-  const tokens = value
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean);
-
-  if (tokens.length === 0) return 'DU';
-  if (tokens.length === 1) return tokens[0].slice(0, 2).toUpperCase();
-  return `${tokens[0][0]}${tokens[1][0]}`.toUpperCase();
-}
-
 export function Navbar() {
+  const { user, login, register, logout } = useAuth();
+
   const [scrolled, setScrolled] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [authMode, setAuthMode] = useState<AuthMode>('login');
-  const [account, setAccount] = useState<PreviewAccount | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const accountMenuRef = useRef<HTMLDivElement | null>(null);
 
@@ -35,6 +20,7 @@ export function Navbar() {
     return () => window.removeEventListener('scroll', handler);
   }, []);
 
+  // Close account menu on outside click or Escape
   useEffect(() => {
     if (!menuOpen) return undefined;
 
@@ -43,11 +29,8 @@ export function Navbar() {
         setMenuOpen(false);
       }
     };
-
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setMenuOpen(false);
-      }
+      if (event.key === 'Escape') setMenuOpen(false);
     };
 
     window.addEventListener('mousedown', onPointerDown);
@@ -58,28 +41,20 @@ export function Navbar() {
     };
   }, [menuOpen]);
 
+  // Close menu when user changes (login / logout)
+  useEffect(() => {
+    setMenuOpen(false);
+    setDialogOpen(false);
+  }, [user]);
+
   const openAuth = (mode: AuthMode) => {
     setAuthMode(mode);
     setDialogOpen(true);
     setMenuOpen(false);
   };
 
-  const closeAuth = () => {
-    setDialogOpen(false);
-  };
-
-  const handleAuthenticate = ({ displayName, email }: PreviewAccountPayload) => {
-    setAccount({
-      displayName,
-      email,
-      initials: getInitials(displayName),
-    });
-    setDialogOpen(false);
-    setMenuOpen(false);
-  };
-
   const handleSignOut = () => {
-    setAccount(null);
+    logout();
     setMenuOpen(false);
   };
 
@@ -104,21 +79,21 @@ export function Navbar() {
         </a>
 
         <div className={styles.trailing}>
-          {account ? (
+          {user ? (
             <div className={styles.accountWrap} ref={accountMenuRef}>
               <button
                 type="button"
                 className={styles.accountButton}
                 aria-expanded={menuOpen}
-                aria-label={`Open account menu for ${account.displayName}`}
+                aria-label={`Open account menu for ${user.displayName}`}
                 onClick={() => setMenuOpen((current) => !current)}
               >
                 <span className={styles.accountAvatar} aria-hidden="true">
-                  {account.initials}
+                  {user.initials}
                 </span>
                 <span className={styles.accountCopy}>
-                  <span className={styles.accountName}>{account.displayName}</span>
-                  <span className={styles.accountMeta}>Preview account</span>
+                  <span className={styles.accountName}>{user.displayName}</span>
+                  <span className={styles.accountMeta}>{user.email}</span>
                 </span>
                 <span className={styles.accountChevron} aria-hidden="true">
                   v
@@ -134,17 +109,9 @@ export function Navbar() {
                     exit={{ opacity: 0, y: -8, scale: 0.99 }}
                     transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
                   >
-                    <span className={styles.menuEyebrow}>Preview session</span>
                     <div className={styles.menuHeader}>
-                      <p className={styles.menuName}>{account.displayName}</p>
-                      <p className={styles.menuEmail}>{account.email}</p>
-                    </div>
-                    <p className={styles.menuNote}>
-                      Saved files sync will appear here once backend is connected.
-                    </p>
-                    <div className={styles.menuSignals} aria-hidden="true">
-                      <span className={styles.menuSignal}>Auth shell ready</span>
-                      <span className={styles.menuSignal}>Workspace persistence next</span>
+                      <p className={styles.menuName}>{user.displayName}</p>
+                      <p className={styles.menuEmail}>{user.email}</p>
                     </div>
                     <button
                       type="button"
@@ -184,9 +151,10 @@ export function Navbar() {
       <AuthDialog
         isOpen={dialogOpen}
         mode={authMode}
-        onClose={closeAuth}
+        onClose={() => setDialogOpen(false)}
         onModeChange={setAuthMode}
-        onAuthenticate={handleAuthenticate}
+        onLogin={login}
+        onRegister={register}
       />
     </nav>
   );

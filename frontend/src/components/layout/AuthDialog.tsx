@@ -6,29 +6,18 @@ import styles from './AuthDialog.module.css';
 
 export type AuthMode = 'login' | 'signup';
 
-export interface PreviewAccountPayload {
-  displayName: string;
-  email: string;
-}
-
 interface AuthDialogProps {
   isOpen: boolean;
   mode: AuthMode;
   onClose: () => void;
   onModeChange: (mode: AuthMode) => void;
-  onAuthenticate: (payload: PreviewAccountPayload) => void;
-}
-
-function formatDisplayName(value: string): string {
-  const cleaned = value.trim();
-  if (!cleaned) return 'Preview User';
-
-  return cleaned
-    .split('@')[0]
-    .split(/[._\-\s]+/)
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(' ');
+  onLogin: (username: string, password: string) => Promise<void>;
+  onRegister: (
+    username: string,
+    email: string,
+    password: string,
+    displayName?: string
+  ) => Promise<void>;
 }
 
 export function AuthDialog({
@@ -36,19 +25,25 @@ export function AuthDialog({
   mode,
   onClose,
   onModeChange,
-  onAuthenticate,
+  onLogin,
+  onRegister,
 }: AuthDialogProps) {
   const reducedMotion = usePrefersReducedMotion();
   const id = useId();
-  const loginIdentityRef = useRef<HTMLInputElement | null>(null);
+  const loginUsernameRef = useRef<HTMLInputElement | null>(null);
   const signupNameRef = useRef<HTMLInputElement | null>(null);
 
-  const [loginIdentity, setLoginIdentity] = useState('');
+  const [loginUsername, setLoginUsername] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [signupName, setSignupName] = useState('');
+  const [signupUsername, setSignupUsername] = useState('');
   const [signupEmail, setSignupEmail] = useState('');
   const [signupPassword, setSignupPassword] = useState('');
 
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Lock scroll and handle Escape key
   useEffect(() => {
     if (!isOpen) return undefined;
 
@@ -56,9 +51,7 @@ export function AuthDialog({
     document.body.style.overflow = 'hidden';
 
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        onClose();
-      }
+      if (event.key === 'Escape') onClose();
     };
 
     window.addEventListener('keydown', onKeyDown);
@@ -68,48 +61,66 @@ export function AuthDialog({
     };
   }, [isOpen, onClose]);
 
+  // Auto-focus the first field when the dialog opens
   useEffect(() => {
     if (!isOpen) return;
-
-    const focusTarget = mode === 'login' ? loginIdentityRef.current : signupNameRef.current;
-    focusTarget?.focus();
+    const target = mode === 'login' ? loginUsernameRef.current : signupNameRef.current;
+    target?.focus();
   }, [isOpen, mode]);
 
+  // Clear error when switching modes
+  useEffect(() => {
+    setError(null);
+  }, [mode]);
+
   const resetFormFields = () => {
-    setLoginIdentity('');
+    setLoginUsername('');
     setLoginPassword('');
     setSignupName('');
+    setSignupUsername('');
     setSignupEmail('');
     setSignupPassword('');
+    setError(null);
   };
 
-  const handleLoginSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const handleLoginSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    const username = loginUsername.trim();
+    const password = loginPassword;
+    if (!username || !password) return;
 
-    const normalizedIdentity = loginIdentity.trim();
-    if (!normalizedIdentity) return;
-
-    onAuthenticate({
-      displayName: formatDisplayName(normalizedIdentity),
-      email: normalizedIdentity.includes('@')
-        ? normalizedIdentity
-        : `${normalizedIdentity.toLowerCase()}@preview.local`,
-    });
-    resetFormFields();
+    setSubmitting(true);
+    setError(null);
+    try {
+      await onLogin(username, password);
+      resetFormFields();
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Login failed. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  const handleSignupSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const handleSignupSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    const displayName = signupName.trim();
+    const username = signupUsername.trim();
+    const email = signupEmail.trim();
+    const password = signupPassword;
+    if (!username || !email || !password) return;
 
-    const normalizedName = signupName.trim();
-    const normalizedEmail = signupEmail.trim();
-    if (!normalizedName || !normalizedEmail) return;
-
-    onAuthenticate({
-      displayName: normalizedName,
-      email: normalizedEmail,
-    });
-    resetFormFields();
+    setSubmitting(true);
+    setError(null);
+    try {
+      await onRegister(username, email, password, displayName || undefined);
+      resetFormFields();
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Registration failed. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const tabGroupId = `${id}-tabs`;
@@ -151,25 +162,25 @@ export function AuthDialog({
               <aside className={styles.storyPanel}>
                 <span className={styles.storyEyebrow}>Private workspace</span>
                 <h2 className={styles.storyTitle}>
-                  A cleaner account entry, ready for the real backend pass.
+                  Your documents, your account.
                 </h2>
                 <p className={styles.storyCopy}>
                   Save uploads, return to earlier analysis sessions, and keep a personal document
-                  trail once the live backend connection lands.
+                  history across every visit.
                 </p>
 
                 <div className={styles.signalList} aria-hidden="true">
                   <div className={styles.signalCard}>
                     <span className={styles.signalLabel}>Access</span>
-                    <span className={styles.signalValue}>Account shell ready</span>
+                    <span className={styles.signalValue}>JWT-secured account</span>
                   </div>
                   <div className={styles.signalCard}>
                     <span className={styles.signalLabel}>Files</span>
-                    <span className={styles.signalValue}>Per-user storage next</span>
+                    <span className={styles.signalValue}>Per-user MinIO storage</span>
                   </div>
                   <div className={styles.signalCard}>
                     <span className={styles.signalLabel}>Analysis</span>
-                    <span className={styles.signalValue}>Frontend prepared for live sync</span>
+                    <span className={styles.signalValue}>Results linked to your account</span>
                   </div>
                 </div>
               </aside>
@@ -203,31 +214,32 @@ export function AuthDialog({
                   </button>
                 </div>
 
-                <div className={styles.previewNotice}>
-                  <span className={styles.previewDot} aria-hidden="true" />
-                  Backend connection lands in the next integration pass, so this account flow stays
-                  in preview mode for now.
-                </div>
+                {error ? (
+                  <div className={styles.previewNotice} role="alert">
+                    <span className={styles.previewDot} aria-hidden="true" />
+                    {error}
+                  </div>
+                ) : null}
 
                 {mode === 'login' ? (
                   <div role="tabpanel" id={loginPanelId} aria-labelledby={tabGroupId}>
                     <h3 className={styles.panelTitle}>Welcome back</h3>
                     <p className={styles.panelCopy}>
-                      Use the visual shell now, then swap in real backend auth once the API work
-                      lands.
+                      Sign in to access your documents and analysis history.
                     </p>
 
                     <form className={styles.form} noValidate onSubmit={handleLoginSubmit}>
                       <label className={styles.field}>
-                        <span className={styles.fieldLabel}>Email or username</span>
+                        <span className={styles.fieldLabel}>Username</span>
                         <input
-                          ref={loginIdentityRef}
+                          ref={loginUsernameRef}
                           className={styles.input}
                           type="text"
-                          name="identity"
+                          name="username"
                           autoComplete="username"
-                          value={loginIdentity}
-                          onChange={(event) => setLoginIdentity(event.target.value)}
+                          value={loginUsername}
+                          disabled={submitting}
+                          onChange={(event) => setLoginUsername(event.target.value)}
                         />
                       </label>
 
@@ -239,39 +251,55 @@ export function AuthDialog({
                           name="password"
                           autoComplete="current-password"
                           value={loginPassword}
+                          disabled={submitting}
                           onChange={(event) => setLoginPassword(event.target.value)}
                         />
                       </label>
 
                       <div className={styles.actionRow}>
-                        <Button type="submit" size="md" className={styles.submitButton}>
-                          Continue in preview
+                        <Button
+                          type="submit"
+                          size="md"
+                          className={styles.submitButton}
+                          disabled={submitting}
+                        >
+                          {submitting ? 'Signing in…' : 'Sign in'}
                         </Button>
-                        <p className={styles.supportCopy}>
-                          Session state stays local until backend auth is wired.
-                        </p>
                       </div>
                     </form>
                   </div>
                 ) : (
                   <div role="tabpanel" id={signupPanelId} aria-labelledby={tabGroupId}>
-                    <h3 className={styles.panelTitle}>Create your account shell</h3>
+                    <h3 className={styles.panelTitle}>Create your account</h3>
                     <p className={styles.panelCopy}>
-                      We'll keep the interface polished and honest now, then hook it into real user
-                      storage later.
+                      Pick a username and start analysing documents right away.
                     </p>
 
                     <form className={styles.form} noValidate onSubmit={handleSignupSubmit}>
                       <label className={styles.field}>
-                        <span className={styles.fieldLabel}>Full name</span>
+                        <span className={styles.fieldLabel}>Display name</span>
                         <input
                           ref={signupNameRef}
                           className={styles.input}
                           type="text"
-                          name="fullName"
+                          name="displayName"
                           autoComplete="name"
                           value={signupName}
+                          disabled={submitting}
                           onChange={(event) => setSignupName(event.target.value)}
+                        />
+                      </label>
+
+                      <label className={styles.field}>
+                        <span className={styles.fieldLabel}>Username</span>
+                        <input
+                          className={styles.input}
+                          type="text"
+                          name="username"
+                          autoComplete="username"
+                          value={signupUsername}
+                          disabled={submitting}
+                          onChange={(event) => setSignupUsername(event.target.value)}
                         />
                       </label>
 
@@ -283,6 +311,7 @@ export function AuthDialog({
                           name="email"
                           autoComplete="email"
                           value={signupEmail}
+                          disabled={submitting}
                           onChange={(event) => setSignupEmail(event.target.value)}
                         />
                       </label>
@@ -295,17 +324,20 @@ export function AuthDialog({
                           name="signupPassword"
                           autoComplete="new-password"
                           value={signupPassword}
+                          disabled={submitting}
                           onChange={(event) => setSignupPassword(event.target.value)}
                         />
                       </label>
 
                       <div className={styles.actionRow}>
-                        <Button type="submit" size="md" className={styles.submitButton}>
-                          Continue in preview
+                        <Button
+                          type="submit"
+                          size="md"
+                          className={styles.submitButton}
+                          disabled={submitting}
+                        >
+                          {submitting ? 'Creating account…' : 'Create account'}
                         </Button>
-                        <p className={styles.supportCopy}>
-                          The visual account state is live now; API-backed auth comes next.
-                        </p>
                       </div>
                     </form>
                   </div>

@@ -36,20 +36,19 @@ def run_classification(document_id: str) -> None:
             },
         )
 
-        doc.status = DocumentStatus.DONE
-        doc.save(update_fields=["status"])
-
         logger.info(
             "Document %s classified as '%s' (confidence %.2f).",
             document_id, result["predicted_label"], result["confidence"],
         )
 
-        # NOTE: invoice extraction is owned by the YOLO module
-        # (Feature_Extraction_Invoice/). Wire it in below when ready, e.g.:
-        #
-        #     if result["predicted_label"] == "invoice":
-        #         from django_q.tasks import async_task
-        #         async_task("apps.documents.tasks.run_extraction", str(doc.id))
+        # Automatically enqueue extraction for invoices
+        if result["predicted_label"] == "invoice":
+            from django_q.tasks import async_task
+            async_task("apps.documents.tasks.run_extraction", str(doc.id))
+            # Status stays PROCESSING until extraction completes
+        else:
+            doc.status = DocumentStatus.DONE
+            doc.save(update_fields=["status"])
 
     except Exception as exc:
         logger.exception("Classification failed for document %s: %s", document_id, exc)
@@ -60,38 +59,46 @@ def run_classification(document_id: str) -> None:
 
 def run_extraction(document_id: str) -> None:
     """
-    Async task stub — invoice field extraction.
+    Async task: extract structured fields from an invoice using YOLO + OCR.
 
-    The extraction module is owned by the YOLO field-detection pipeline
-    in `Feature_Extraction_Invoice/`. This function is intentionally a
-    stub so the existing seam (model + serializer + view) stays in place;
-    plug the YOLO inference call in here and write the resulting fields
-    into `InvoiceExtraction`.
-
-    Reference signature for whoever wires it up:
-
-        fields = {
-            "invoice_number": ...,
-            "invoice_date":   ...,   # date | None
-            "due_date":       ...,   # date | None
-            "issuer_name":    ...,
-            "recipient_name": ...,
-            "total_amount":   ...,   # Decimal | None
-            "currency":       ...,
-            "raw_text":       ...,
-            "confidence_map": {...},
-        }
-        InvoiceExtraction.objects.update_or_create(document=doc, defaults=fields)
+    Automatically enqueued by run_classification when predicted_label == 'invoice'.
+    Can also be triggered manually via POST /api/documents/{id}/classify/
     """
-    from .models import Document
+    from .models import Document, DocumentStatus, InvoiceExtraction
 
     try:
-        Document.objects.get(id=document_id)
+        doc = Document.objects.get(id=document_id)
     except Document.DoesNotExist:
         logger.error("Extraction task: document %s not found.", document_id)
         return
 
-    logger.warning(
-        "run_extraction stub called for %s — YOLO pipeline not yet wired in.",
-        document_id,
-    )
+    try:
+        from ml.extractor import extract_invoice_fields
+
+        fields = extract_invoice_fields(doc.storage_key, doc.content_type)
+
+        InvoiceExtraction.objects.update_or_create(
+            document=doc,
+            defaults={
+                "invoice_number":  fields["invoice_number"],
+                "invoice_date":    fields["invoice_date"],
+                "due_date":        fields["due_date"],
+                "issuer_name":     fields["issuer_name"],
+                "recipient_name":  fields["recipient_name"],
+                "total_amount":    fields["total_amount"],
+                "currency":        fields["currency"],
+                "raw_text":        fields["raw_text"],
+                "confidence_map":  fields["confidence_map"],
+            },
+        )
+
+        doc.status = DocumentStatus.DONE
+        doc.save(update_fields=["status"])
+
+        logger.info("Invoice extraction complete for document %s.", document_id)
+
+    except Exception as exc:
+        logger.exception("Extraction failed for document %s: %s", document_id, exc)
+        doc.status = DocumentStatus.ERROR
+        doc.save(update_fields=["status"])
+        raise
