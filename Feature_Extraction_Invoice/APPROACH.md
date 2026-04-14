@@ -4,21 +4,21 @@
 
 The objective is to extract structured fields from invoice images, such as:
 
-- `Numéro_Facture`
-- `Date_Facturation`
-- `Nom_Client`
-- `Email_Client`
-- `Tel_Client`
-- `Adresse_Facturation`
-- `Adresse_Livraison`
-- `Produits`
-- `Total_Hors_TVA`
-- `TVA`
-- `Total_TTC`
-- `Remise`
-- `Pourcentage_TVA`
-- `Pourcentage_Remise`
-- `Echéance`
+- `Invoice_Number`
+- `Invoice_Date`
+- `Client_Name`
+- `Client_Email`
+- `Client_Phone`
+- `Billing_Address`
+- `Shipping_Address`
+- `Products`
+- `Subtotal`
+- `VAT`
+- `Total`
+- `Discount`
+- `VAT_Rate`
+- `Discount_Rate`
+- `Due_Date`
 
 ## Problem Framing
 
@@ -67,7 +67,9 @@ Limitations:
 
 ## Chosen Approach
 
-For this project, the preferred approach is:
+We are maintaining two extraction tracks in parallel:
+
+### Primary Track
 
 ```text
 Detection / segmentation first -> OCR second -> optional cleanup rules
@@ -81,6 +83,16 @@ Our dataset already contains labeled bounding boxes for semantic invoice fields.
 2. Read the text inside that field
 
 This is generally better than asking one model to infer field meaning from full-page OCR alone.
+
+### Fallback Track
+
+```text
+Full-page OCR -> anchor-based search -> regex cleanup -> structured JSON
+```
+
+Reason:
+
+If YOLO training remains unstable or too slow, OCR plus rule-based extraction is a practical alternative for a course project. It is easier to finish and debug, especially for fields like email, phone, dates, and totals.
 
 ## Current Dataset
 https://universe.roboflow.com/roboflow-5gpbq/invoice-data-mbpu8
@@ -122,11 +134,26 @@ python3 Feature_Extraction_Invoice/visualize_labels.py --sample 5
 python3 Feature_Extraction_Invoice/visualize_labels.py --image 671_png_jpg.rf.p73UNqF5SQDjw12vTAI6.jpg --open
 ```
 
+## Method Files
+
+Method entry points are grouped under:
+
+- `Feature_Extraction_Invoice/methods/`
+
+Available wrappers:
+
+- `methods/train_yolo.py`
+- `methods/run_overnight_yolo.sh`
+- `methods/extract_invoice_ocr.py`
+- `methods/visualize_labels.py`
+
+The original top-level scripts remain available too.
+
 ## Planned Pipeline
 
 ### Stage 1. Field Detection
 
-Train an object detection model to detect invoice fields such as `Email_Client`, `Tel_Client`, `Total_TTC`, and `Numéro_Facture`.
+Train an object detection model to detect invoice fields such as `Client_Email`, `Client_Phone`, `Total`, and `Invoice_Number`.
 
 Recommended model family:
 
@@ -156,9 +183,9 @@ Example:
 
 ```json
 {
-  "Email_Client": "client@example.com",
-  "Tel_Client": "+33 6 12 34 56 78",
-  "Total_TTC": "1450.00"
+  "Client_Email": "client@example.com",
+  "Client_Phone": "+33 6 12 34 56 78",
+  "Total": "1450.00"
 }
 ```
 
@@ -202,6 +229,25 @@ field detection -> OCR -> light NLP / rules
 
 If needed later, a language model can still be added as a refinement stage, but not as the main field-localization method.
 
+## OCR-First Fallback
+
+We also implemented a rule-based OCR-first fallback:
+
+- `Feature_Extraction_Invoice/extract_invoice_ocr.py`
+
+This fallback:
+
+1. runs OCR on the full page
+2. groups OCR tokens into lines
+3. searches for anchor words such as `Invoice`, `Date`, `TTC`, `TVA`, `Email`, and `Tel`
+4. applies regex and field-specific heuristics
+
+This path is especially useful when:
+
+- YOLO metrics are unstable
+- training time is too long
+- we need a baseline extractor quickly
+
 ## Evaluation Plan
 
 We should evaluate the system at two levels.
@@ -242,12 +288,11 @@ For a realistic course project, the best scope is:
 
 Suggested priority fields:
 
-- `Numéro_Facture`
-- `Date_Facturation`
-- `Nom_Client`
-- `Email_Client`
-- `Tel_Client`
-- `Total_TTC`
+- `Invoice_Number`
+- `Invoice_Date`
+- `Client_Name`
+- `Client_Email`
+- `Client_Phone`
+- `Total`
 
 This keeps the project focused while still demonstrating a complete document understanding pipeline.
-
