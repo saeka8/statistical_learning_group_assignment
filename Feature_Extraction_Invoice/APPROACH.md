@@ -67,7 +67,7 @@ Limitations:
 
 ## Chosen Approach
 
-We are maintaining two extraction tracks in parallel:
+We are currently maintaining three extraction tracks in parallel:
 
 ### Primary Track
 
@@ -93,6 +93,16 @@ Full-page OCR -> anchor-based search -> regex cleanup -> structured JSON
 Reason:
 
 If YOLO training remains unstable or too slow, OCR plus rule-based extraction is a practical alternative for a course project. It is easier to finish and debug, especially for fields like email, phone, dates, and totals.
+
+### Region-First Track
+
+```text
+Paragraph / table detection -> OCR inside each detected region -> field extraction from region text
+```
+
+Reason:
+
+Instead of detecting every final field directly, we can first detect larger logical regions such as `paragraph` and `table`. This can make OCR more reliable because it limits reading to semantically related content blocks. It is especially useful when several related values appear together in the same area, for example line items inside a table or contact details grouped in one paragraph.
 
 ## Current Dataset
 https://universe.roboflow.com/roboflow-5gpbq/invoice-data-mbpu8
@@ -139,6 +149,7 @@ python3 Feature_Extraction_Invoice/Dataset_verification/visualize_labels.py --im
 The project is currently organized into method-specific folders:
 
 - `Feature_Extraction_Invoice/YOLO_method/`
+- `Feature_Extraction_Invoice/paragraph_yolo/`
 - `Feature_Extraction_Invoice/OCR_method/`
 - `Feature_Extraction_Invoice/Dataset_verification/`
 
@@ -147,6 +158,8 @@ Main entry points:
 - `YOLO_method/train_yolo.py`
 - `YOLO_method/run_overnight_yolo.sh`
 - `YOLO_method/predict_invoice_yolo.py`
+- `paragraph_yolo/train_paragraph_yolo.py`
+- `paragraph_yolo/data.yaml`
 - `OCR_method/extract_invoice_ocr.py`
 - `OCR_method/OCR_FALLBACK.md`
 - `OCR_method/requirements_ocr.txt`
@@ -154,9 +167,12 @@ Main entry points:
 
 ## Planned Pipeline
 
-### Stage 1. Field Detection
+### Stage 1. Region or Field Detection
 
-Train an object detection model to detect invoice fields such as `Client_Email`, `Client_Phone`, `Total`, and `Invoice_Number`.
+Train an object detection model either:
+
+- at field level, to detect targets such as `Client_Email`, `Client_Phone`, `Total`, and `Invoice_Number`
+- or at region level, to detect broader classes such as `paragraph` and `table`
 
 Recommended model family:
 
@@ -174,9 +190,30 @@ Expected output of stage 1:
 - field labels
 - confidence scores
 
+Current alternative detector:
+
+- `Feature_Extraction_Invoice/paragraph_yolo/`
+
+This dataset uses two classes:
+
+- `paragraph`
+- `table`
+
+Its training script:
+
+- prepares a grouped train/validation split from the current data
+- avoids leakage by keeping augmented versions of the same invoice in the same split
+- trains YOLO on the prepared dataset
+
+Main command:
+
+```bash
+python3 Feature_Extraction_Invoice/paragraph_yolo/train_paragraph_yolo.py --epochs 20 --imgsz 960 --batch 4 --device mps --name paragraph_table
+```
+
 ### Stage 2. OCR on Detected Regions
 
-For each detected field:
+For each detected field or region:
 
 1. Crop the image region
 2. Run OCR on the crop
@@ -211,6 +248,14 @@ After OCR, apply lightweight cleanup:
 - amount cleanup for currency values
 
 This step improves final field quality without requiring a separate large model.
+
+When using the `paragraph` / `table` detector, this post-processing step becomes:
+
+- run OCR on each detected paragraph or table crop
+- merge the OCR text within the same crop
+- apply field extraction rules on that crop only
+
+This reduces confusion compared with full-page OCR because totals, invoice metadata, and product rows are no longer mixed together across the whole page.
 
 ## Why Not OCR + Transformer Only
 
@@ -251,6 +296,34 @@ This path is especially useful when:
 - training time is too long
 - we need a baseline extractor quickly
 
+## Paragraph/Table Detection Track
+
+We added a second YOLO-based detection strategy under:
+
+- `Feature_Extraction_Invoice/paragraph_yolo/`
+
+The idea is:
+
+```text
+invoice image -> detect paragraph/table blocks -> OCR per block -> extract fields from block text
+```
+
+Why this may help:
+
+- the classes are broader and simpler than field-level detection
+- OCR gets cleaner local context
+- related information often stays inside the same detected block
+
+Example use cases:
+
+- detect a table block and extract product rows from it
+- detect a paragraph block containing invoice metadata and extract invoice number, dates, email, or phone from that block only
+
+Current note:
+
+- the paragraph/table dataset originally contained only one split
+- `train_paragraph_yolo.py` now creates a proper grouped train/validation split automatically
+
 ## Evaluation Plan
 
 We should evaluate the system at two levels.
@@ -271,23 +344,33 @@ Measure whether the final extracted value is correct:
 
 This matters because good bounding boxes do not automatically imply good OCR results.
 
+For the paragraph/table track, evaluation should also check:
+
+- whether the correct logical block was detected
+- whether OCR inside that block is cleaner than full-page OCR
+- whether extracting fields from block-local text improves final accuracy
+
 ## Practical Project Plan
 
 1. Verify annotations visually with `Feature_Extraction_Invoice/Dataset_verification/visualize_labels.py`
-2. Convert the dataset into the format required by the chosen detector
-3. Train a field detection model
-4. Run inference on test invoices
-5. Crop detected fields and apply OCR
-6. Normalize extracted values
-7. Evaluate final field extraction quality
+2. Train either the field-level detector or the paragraph/table detector
+3. Run inference on unseen invoices
+4. Crop detected fields or regions and apply OCR
+5. Normalize extracted values
+6. Evaluate final field extraction quality
 
 ## Recommended Scope
 
 For a realistic course project, the best scope is:
 
-- train a detector on the annotated fields
+- train one detector variant that is stable enough to use
 - apply OCR to detected regions
 - demonstrate extraction of a subset of important fields
+
+Two realistic implementation choices are:
+
+- field-level detection + OCR
+- paragraph/table detection + OCR + rule-based field extraction
 
 Suggested priority fields:
 
