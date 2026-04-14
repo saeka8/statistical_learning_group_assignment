@@ -25,8 +25,8 @@ export function getCategoryColor(category: string): string {
   const colors: Record<string, string> = {
     invoice: 'var(--color-accent-indigo)',
     email: 'var(--color-accent-sky)',
-    resume: 'var(--color-accent-emerald)',
-    scientific_publication: 'var(--color-accent-violet)',
+    resume: 'var(--color-accent-violet)',
+    scientific_publication: 'var(--color-accent-blue)',
   };
   return colors[category] || 'var(--color-text-tertiary)';
 }
@@ -35,8 +35,8 @@ export function getCategoryBg(category: string): string {
   const colors: Record<string, string> = {
     invoice: 'var(--color-accent-indigo-bg)',
     email: 'rgba(14, 165, 233, 0.08)',
-    resume: 'var(--color-accent-emerald-bg)',
-    scientific_publication: 'rgba(139, 92, 246, 0.08)',
+    resume: 'rgba(139, 92, 246, 0.08)',
+    scientific_publication: 'rgba(59, 130, 246, 0.08)',
   };
   return colors[category] || 'rgba(148, 163, 184, 0.08)';
 }

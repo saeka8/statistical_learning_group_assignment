@@ -36,20 +36,19 @@ def run_classification(document_id: str) -> None:
             },
         )
 
-        doc.status = DocumentStatus.DONE
-        doc.save(update_fields=["status"])
-
         logger.info(
             "Document %s classified as '%s' (confidence %.2f).",
             document_id, result["predicted_label"], result["confidence"],
         )
 
-        # If classified as invoice, automatically enqueue extraction
+        # Automatically enqueue extraction for invoices
         if result["predicted_label"] == "invoice":
             from django_q.tasks import async_task
-
             async_task("apps.documents.tasks.run_extraction", str(doc.id))
-            logger.info("Invoice detected — extraction task enqueued for %s.", document_id)
+            # Status stays PROCESSING until extraction completes
+        else:
+            doc.status = DocumentStatus.DONE
+            doc.save(update_fields=["status"])
 
     except Exception as exc:
         logger.exception("Classification failed for document %s: %s", document_id, exc)
@@ -60,9 +59,10 @@ def run_classification(document_id: str) -> None:
 
 def run_extraction(document_id: str) -> None:
     """
-    Async task: extract structured fields from an invoice document.
+    Async task: extract structured fields from an invoice using YOLO + OCR.
 
     Automatically enqueued by run_classification when predicted_label == 'invoice'.
+    Can also be triggered manually via POST /api/documents/{id}/classify/
     """
     from .models import Document, DocumentStatus, InvoiceExtraction
 
@@ -77,7 +77,20 @@ def run_extraction(document_id: str) -> None:
 
         fields = extract_invoice_fields(doc.storage_key, doc.content_type)
 
-        InvoiceExtraction.objects.update_or_create(document=doc, defaults=fields)
+        InvoiceExtraction.objects.update_or_create(
+            document=doc,
+            defaults={
+                "invoice_number":  fields["invoice_number"],
+                "invoice_date":    fields["invoice_date"],
+                "due_date":        fields["due_date"],
+                "issuer_name":     fields["issuer_name"],
+                "recipient_name":  fields["recipient_name"],
+                "total_amount":    fields["total_amount"],
+                "currency":        fields["currency"],
+                "raw_text":        fields["raw_text"],
+                "confidence_map":  fields["confidence_map"],
+            },
+        )
 
         doc.status = DocumentStatus.DONE
         doc.save(update_fields=["status"])

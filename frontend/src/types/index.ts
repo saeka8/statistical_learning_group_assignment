@@ -47,6 +47,8 @@ export type UploadStatus = 'idle' | 'uploading' | 'processing' | 'classified' | 
 
 export interface UploadedDocument {
   id: string;
+  /** UUID assigned by the backend after a successful upload */
+  backendId?: string;
   file: File | null;
   name: string;
   size: number;
@@ -96,9 +98,3 @@ export type AnalysisPhase =
   | 'extracting_invoice'
   | 'complete'
   | 'error';
-
-export interface AnalysisState {
-  phase: AnalysisPhase;
-  documents: UploadedDocument[];
-  activeDocumentId: string | null;
-}

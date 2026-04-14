@@ -5,12 +5,6 @@ import { Scene3D } from '../3d/Scene3D';
 import { Container } from '../layout/Container';
 import styles from './HeroSection.module.css';
 
-const proofItems = [
-  { value: '4', label: 'document classes' },
-  { value: '~4 s', label: 'average latency' },
-  { value: '87.5%', label: 'classification accuracy' },
-];
-
 export function HeroSection() {
   const reducedMotion = usePrefersReducedMotion();
 
@@ -38,20 +32,21 @@ export function HeroSection() {
           <div className={styles.content}>
             <motion.div {...animProps(0.05)} className={styles.kickerRow}>
               <span className={styles.eyebrow}>Statistical Learning Project</span>
+              <span className={styles.microBadge}>Classical ML pipeline</span>
             </motion.div>
 
-            <motion.div {...animProps(0.12)}>
+            <motion.div {...animProps(0.12)} className={styles.headlineBlock}>
+              <p className={styles.leadIn}>A quieter 3D showcase for document intelligence.</p>
               <h1 id="hero-title" className={styles.title}>
-                Classify documents.
-                <br />
-                Extract invoice data.
+                <span>From raw pages</span>
+                <span className={styles.titleAccent}>to clear decisions.</span>
               </h1>
             </motion.div>
 
             <motion.div {...animProps(0.18)}>
               <p className={styles.subtitle}>
-                A cleaner presentation interface for showing how a traditional ML pipeline sorts
-                business documents and turns invoices into structured fields.
+                DocLens turns OCR, document classification, and invoice field recovery into one
+                polished 3D surface built for demos, reviews, and classroom presentations.
               </p>
             </motion.div>
 
@@ -66,14 +61,9 @@ export function HeroSection() {
               </div>
             </motion.div>
 
-            <motion.div {...animProps(0.3)} className={styles.proofStrip}>
-              {proofItems.map((item) => (
-                <div key={item.label} className={styles.proofCard}>
-                  <span className={styles.proofValue}>{item.value}</span>
-                  <span className={styles.proofLabel}>{item.label}</span>
-                </div>
-              ))}
-            </motion.div>
+            <motion.p {...animProps(0.3)} className={styles.caption}>
+              Classical workflow, visible end to end.
+            </motion.p>
           </div>
 
           <motion.div {...animProps(0.14)} className={styles.visualColumn}>

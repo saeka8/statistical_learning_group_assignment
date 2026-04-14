@@ -1,4 +1,12 @@
-import { useCallback, useRef, useState, type ChangeEvent, type DragEvent } from 'react';
+import {
+  useCallback,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type ClipboardEvent,
+  type DragEvent,
+  type FocusEvent,
+} from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { sampleDocuments } from '../../data/sampleData';
 import { usePrefersReducedMotion } from '../../hooks/usePrefersReducedMotion';
@@ -31,6 +39,34 @@ const sampleGlyphs = {
   scientific_publication: 'SCI',
 } as const;
 
+const phaseMessages: Record<AnalysisPhase, string> = {
+  idle: 'Ready for a live document run',
+  uploading: 'Uploading documents...',
+  preprocessing: 'Preprocessing and OCR...',
+  extracting_features: 'Extracting features (TF-IDF, layout)...',
+  classifying: 'Running ensemble classifier...',
+  extracting_invoice: 'Extracting invoice fields (NER, regex)...',
+  complete: 'Analysis complete',
+  error: 'Review the document and try again',
+};
+
+const phaseProgress: Record<AnalysisPhase, string> = {
+  idle: '0%',
+  uploading: '20%',
+  preprocessing: '40%',
+  extracting_features: '60%',
+  classifying: '80%',
+  extracting_invoice: '90%',
+  complete: '100%',
+  error: '100%',
+};
+
+const workflowSignals = [
+  { label: 'OCR prep', value: 'Deskew + clean' },
+  { label: 'Label space', value: '6 classes' },
+  { label: 'Invoice route', value: 'NER + regex' },
+];
+
 export function UploadWorkspace({
   documents,
   phase,
@@ -43,9 +79,33 @@ export function UploadWorkspace({
   onSetActive,
 }: UploadWorkspaceProps) {
   const [isDragging, setIsDragging] = useState(false);
+  const [isPasteFocused, setIsPasteFocused] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const reducedMotion = usePrefersReducedMotion();
   const dragCounter = useRef(0);
+
+  const extractClipboardFiles = useCallback((clipboardData: DataTransfer | null) => {
+    if (!clipboardData) return [];
+
+    return Array.from(clipboardData.items)
+      .filter((item) => item.kind === 'file')
+      .map((item, index) => {
+        const file = item.getAsFile();
+        if (!file) return null;
+
+        const extension = file.type.split('/')[1] ?? 'png';
+        const fileName =
+          file.name && file.name.trim().length > 0
+            ? file.name
+            : `pasted-document-${Date.now()}-${index + 1}.${extension}`;
+
+        return new File([file], fileName, {
+          type: file.type || 'image/png',
+          lastModified: file.lastModified || Date.now(),
+        });
+      })
+      .filter((file): file is File => file !== null);
+  }, []);
 
   const handleDragEnter = useCallback((e: DragEvent) => {
     e.preventDefault();
@@ -84,6 +144,27 @@ export function UploadWorkspace({
     [onAddFiles]
   );
 
+  const handlePaste = useCallback(
+    (e: ClipboardEvent<HTMLDivElement>) => {
+      const files = extractClipboardFiles(e.clipboardData);
+      if (files.length === 0) return;
+
+      e.preventDefault();
+      onAddFiles(files);
+    },
+    [extractClipboardFiles, onAddFiles]
+  );
+
+  const handleFocus = useCallback(() => {
+    setIsPasteFocused(true);
+  }, []);
+
+  const handleBlur = useCallback((e: FocusEvent<HTMLDivElement>) => {
+    if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
+      setIsPasteFocused(false);
+    }
+  }, []);
+
   const isProcessing = [
     'uploading',
     'preprocessing',
@@ -91,19 +172,26 @@ export function UploadWorkspace({
     'classifying',
     'extracting_invoice',
   ].includes(phase);
+  const phaseMessage = phaseMessages[phase];
+  const stagedSummary =
+    documents.length === 0
+      ? 'Load a sample or drop files to begin the demo.'
+      : documents.length === 1
+        ? '1 document is staged for review.'
+        : `${documents.length} documents are staged for review.`;
 
   return (
     <section id="workspace" className="section-padding" aria-labelledby="workspace-title">
       <Container>
         <SectionReveal>
           <div className={styles.header}>
-            <Badge label="Analysis Workspace" variant="accent" size="md" />
+            <Badge label="Workspace" variant="accent" size="md" />
             <h2 id="workspace-title" className={styles.title}>
-              Stage a live document analysis
+              Run the workflow
             </h2>
             <p className={styles.subtitle}>
-              Load a real file or a curated sample, then let the model classify the document and
-              surface invoice entities in a single calm workspace built for presentation.
+              Upload a live document or load a sample to run classification and, when relevant,
+              invoice field recovery in one focused workspace.
             </p>
           </div>
         </SectionReveal>
@@ -113,14 +201,17 @@ export function UploadWorkspace({
             <div className={styles.uploadCol}>
               <Card variant="glass" padding="lg">
                 <div
-                  className={`${styles.dropzone} ${isDragging ? styles.dropzoneActive : ''}`}
+                  className={`${styles.dropzone} ${isDragging ? styles.dropzoneActive : ''} ${isPasteFocused ? styles.dropzoneFocused : ''}`}
                   onDragEnter={handleDragEnter}
                   onDragLeave={handleDragLeave}
                   onDragOver={handleDragOver}
                   onDrop={handleDrop}
+                  onPaste={handlePaste}
+                  onFocus={handleFocus}
+                  onBlur={handleBlur}
                   role="button"
                   tabIndex={0}
-                  aria-label="Upload documents by drag and drop or click to browse"
+                  aria-label="Upload documents by drag and drop, click to browse, or paste when focused"
                   onClick={() => fileInputRef.current?.click()}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' || e.key === ' ') {
@@ -171,11 +262,17 @@ export function UploadWorkspace({
                   <p className={styles.dropzoneTitle}>
                     {isDragging ? 'Release to stage the document' : 'Drag in a document'}
                   </p>
-                  <p className={styles.dropzoneHint}>PDF, PNG, JPG, TIFF - or click to browse</p>
+                  <p className={styles.dropzoneHint}>
+                    PDF, PNG, JPG, TIFF - click, drag, or focus here and press Ctrl+V
+                  </p>
+                  <p className={styles.dropzonePasteHint}>
+                    <span className={styles.pasteKey}>Ctrl+V</span>
+                    {isPasteFocused ? 'Paste screenshot ready' : 'Paste works while this area is focused'}
+                  </p>
                 </div>
 
                 <div className={styles.samples}>
-                  <p className={styles.samplesLabel}>Or load a curated sample set:</p>
+                  <p className={styles.samplesLabel}>Or start with a sample document:</p>
                   <div className={styles.sampleButtons}>
                     {sampleDocuments.map((sample) => (
                       <button
@@ -195,9 +292,9 @@ export function UploadWorkspace({
             </div>
 
             <div className={styles.fileCol}>
-              <Card variant="default" padding="lg">
+              <Card variant="default" padding="lg" className={styles.filePanel}>
                 <div className={styles.fileHeader}>
-                  <h3 className={styles.fileTitle}>Document Queue</h3>
+                  <h3 className={styles.fileTitle}>Queue</h3>
                   {documents.length > 0 && (
                     <Badge
                       label={`${documents.length} file${documents.length > 1 ? 's' : ''}`}
@@ -270,65 +367,69 @@ export function UploadWorkspace({
                   </ul>
                 )}
 
-                <div className={styles.controlBar}>
-                  <Button
-                    variant="primary"
-                    size="md"
-                    onClick={onAnalyze}
-                    disabled={documents.length === 0 || isProcessing}
-                    loading={isProcessing}
-                    icon={
-                      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                        <path
-                          d="M8 1v6l4-2"
-                          stroke="currentColor"
-                          strokeWidth="1.5"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        />
-                        <circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.5" />
-                      </svg>
-                    }
-                  >
-                    {isProcessing ? 'Analyzing...' : 'Analyze All'}
-                  </Button>
-                  {documents.length > 0 && (
-                    <Button variant="ghost" size="md" onClick={onReset} disabled={isProcessing}>
-                      Clear All
+                <div className={styles.filePanelFooter}>
+                  <div className={styles.controlBar}>
+                    <Button
+                      variant="primary"
+                      size="md"
+                      onClick={onAnalyze}
+                      disabled={documents.length === 0 || isProcessing}
+                      loading={isProcessing}
+                      icon={
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                          <path
+                            d="M8 1v6l4-2"
+                            stroke="currentColor"
+                            strokeWidth="1.5"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                          <circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.5" />
+                        </svg>
+                      }
+                    >
+                      {isProcessing ? 'Analyzing...' : 'Analyze All'}
                     </Button>
-                  )}
-                </div>
-
-                {isProcessing && (
-                  <div className={styles.phaseIndicator}>
-                    <div className={styles.phaseBar}>
-                      <div
-                        className={styles.phaseFill}
-                        style={{
-                          width:
-                            phase === 'uploading'
-                              ? '20%'
-                              : phase === 'preprocessing'
-                                ? '40%'
-                                : phase === 'extracting_features'
-                                  ? '60%'
-                                  : phase === 'classifying'
-                                    ? '80%'
-                                    : phase === 'extracting_invoice'
-                                      ? '90%'
-                                      : '100%',
-                        }}
-                      />
-                    </div>
-                    <span className={styles.phaseLabel}>
-                      {phase === 'uploading' && 'Uploading documents...'}
-                      {phase === 'preprocessing' && 'Preprocessing and OCR...'}
-                      {phase === 'extracting_features' && 'Extracting features (TF-IDF, layout)...'}
-                      {phase === 'classifying' && 'Running ensemble classifier...'}
-                      {phase === 'extracting_invoice' && 'Extracting invoice fields (NER, regex)...'}
-                    </span>
+                    {documents.length > 0 && (
+                      <Button variant="ghost" size="md" onClick={onReset} disabled={isProcessing}>
+                        Clear All
+                      </Button>
+                    )}
                   </div>
-                )}
+
+                  <div className={styles.workspaceDock}>
+                    <div className={styles.workspaceDockHeader}>
+                      <div>
+                        <span className={styles.workspaceDockEyebrow}>Workflow</span>
+                        <h4 className={styles.workspaceDockTitle}>{phaseMessage}</h4>
+                        <p className={styles.workspaceDockMeta}>{stagedSummary}</p>
+                      </div>
+                      <div className={styles.workspaceDial}>
+                        <span className={styles.workspaceDialValue}>{documents.length}</span>
+                        <span className={styles.workspaceDialLabel}>Files</span>
+                      </div>
+                    </div>
+
+                    <div className={styles.phaseIndicator}>
+                      <div className={styles.phaseBar}>
+                        <div
+                          className={styles.phaseFill}
+                          style={{ width: phaseProgress[phase] }}
+                        />
+                      </div>
+                      <span className={styles.phaseLabel}>{phase.replace(/_/g, ' ')}</span>
+                    </div>
+
+                    <div className={styles.workspaceSignals}>
+                      {workflowSignals.map((sig) => (
+                        <div key={sig.label} className={styles.workspaceSignal}>
+                          <span className={styles.workspaceSignalLabel}>{sig.label}</span>
+                          <span className={styles.workspaceSignalValue}>{sig.value}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
               </Card>
             </div>
           </div>

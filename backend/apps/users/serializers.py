@@ -11,12 +11,23 @@ class UserProfileSerializer(serializers.ModelSerializer):
         read_only_fields = ["created_at"]
 
 
+def _get_or_create_profile(user):
+    """Return the user's profile, creating it if the signal missed."""
+    try:
+        return user.profile
+    except UserProfile.DoesNotExist:
+        return UserProfile.objects.create(user=user)
+
+
 class UserSerializer(serializers.ModelSerializer):
-    profile = UserProfileSerializer(read_only=True)
+    profile = serializers.SerializerMethodField()
 
     class Meta:
         model = User
         fields = ["id", "username", "email", "profile"]
+
+    def get_profile(self, obj):
+        return UserProfileSerializer(_get_or_create_profile(obj)).data
 
 
 class RegisterSerializer(serializers.ModelSerializer):
@@ -34,8 +45,9 @@ class RegisterSerializer(serializers.ModelSerializer):
             email=validated_data.get("email", ""),
             password=validated_data["password"],
         )
-        user.profile.display_name = display_name
-        user.profile.save()
+        profile = _get_or_create_profile(user)
+        profile.display_name = display_name
+        profile.save()
         return user
 
     def to_representation(self, instance):
@@ -44,7 +56,7 @@ class RegisterSerializer(serializers.ModelSerializer):
             "id": instance.pk,
             "username": instance.username,
             "email": instance.email,
-            "profile": UserProfileSerializer(instance.profile).data,
+            "profile": UserProfileSerializer(_get_or_create_profile(instance)).data,
             "tokens": {
                 "access": str(refresh.access_token),
                 "refresh": str(refresh),
@@ -67,20 +79,20 @@ class ProfileUpdateSerializer(serializers.ModelSerializer):
         instance.email = validated_data.get("email", instance.email)
         instance.save()
         if profile_data:
-            instance.profile.display_name = profile_data.get(
-                "display_name", instance.profile.display_name
-            )
-            instance.profile.save()
+            profile = _get_or_create_profile(instance)
+            profile.display_name = profile_data.get("display_name", profile.display_name)
+            profile.save()
         return instance
 
     def to_representation(self, instance):
+        profile = _get_or_create_profile(instance)
         return {
             "id": instance.pk,
             "username": instance.username,
             "email": instance.email,
             "profile": {
-                "display_name": instance.profile.display_name,
-                "avatar_url": instance.profile.avatar_url,
-                "created_at": instance.profile.created_at,
+                "display_name": profile.display_name,
+                "avatar_url": profile.avatar_url,
+                "created_at": profile.created_at,
             },
         }
