@@ -35,7 +35,7 @@ The backend exposes a REST API that allows clients to:
 
 - Register and authenticate users with profile management.
 - Upload documents (PDF, images, plain text).
-- Trigger asynchronous classification jobs that label each document into one of four categories: **Invoice**, **Contract**, **Email**, **Technical Report**.
+- Trigger asynchronous classification jobs that label each document into one of four categories: **Invoice**, **Email**, **Resume**, **Scientific Publication**.
 - For documents classified as **Invoice**, automatically run an information-extraction pipeline and return structured fields (invoice number, date, due date, issuer, recipient, total).
 - Query the results of past jobs and download processed files.
 
@@ -49,13 +49,13 @@ The system is designed to run 100% inside Docker containers so any developer (or
 |---|---|---|
 | Language | Python 3.12 | Ecosystem match with scikit-learn, spaCy, pytesseract |
 | Web Framework | Django 5.x + Django REST Framework 3.x | Batteries-included auth, ORM, serializers |
-| Task Queue | Celery 5.x + Redis 7 | Async ML jobs without blocking HTTP |
+| Task Queue | django-q2 + PostgreSQL broker | Async ML jobs without blocking HTTP; uses the existing PostgreSQL as broker — no extra service needed |
 | Database | PostgreSQL 16 | JSONB for extracted fields, robust transactions |
 | File Storage | MinIO (S3-compatible) | Self-hosted object storage; swap to AWS S3 in prod with one env var change |
 | Auth | JWT via `djangorestframework-simplejwt` | Stateless, mobile-friendly |
 | Containerization | Docker + Docker Compose | Reproducible dev & prod environments |
 | Reverse Proxy | Nginx (prod only) | TLS termination, static files |
-| ML Libraries | scikit-learn, spaCy, pytesseract, pdfminer.six | No generative AI — rule-based + classical ML only |
+| ML Libraries | scikit-learn, scikit-image, pytesseract, pdfminer.six, Pillow | No generative AI — rule-based + classical ML only |
 
 ---
 
@@ -78,7 +78,7 @@ project-root/
 │   │   │   ├── development.py
 │   │   │   └── production.py
 │   │   ├── urls.py
-│   │   ├── celery.py
+│   │   ├── # django-q2 uses DB broker — no separate config file needed
 │   │   └── wsgi.py
 │   │
 │   ├── apps/
@@ -123,10 +123,6 @@ services:
       interval: 10s
       retries: 5
 
-  redis:
-    image: redis:7-alpine
-    command: redis-server --requirepass ${REDIS_PASSWORD}
-
   minio:
     image: minio/minio
     command: server /data --console-address ":9001"
@@ -152,16 +148,12 @@ services:
     depends_on:
       db:
         condition: service_healthy
-      redis:
-        condition: service_started
-
   worker:
     build: ./backend
-    command: celery -A config worker -l info -Q classification,extraction
+    command: python manage.py qcluster
     env_file: .env
     depends_on:
       - api
-      - redis
 
 volumes:
   postgres_data:
@@ -201,9 +193,9 @@ class UserProfile(models.Model):
 
 class DocumentCategory(models.TextChoices):
     INVOICE          = "invoice",          "Invoice"
-    CONTRACT         = "contract",         "Contract"
     EMAIL            = "email",            "Email"
-    TECHNICAL_REPORT = "technical_report", "Technical Report"
+    SCIENTIFIC_PUBLICATION = "scientific_publication", "Scientific Publication"
+    RESUME           = "resume",           "Resume"
     UNKNOWN          = "unknown",          "Unknown"
 
 class Document(models.Model):
@@ -484,9 +476,9 @@ Retrieve full detail for a single document.
     "confidence": 0.94,
     "all_scores": {
       "invoice": 0.94,
-      "contract": 0.03,
-      "email": 0.01,
-      "technical_report": 0.02
+      "email": 0.03,
+      "scientific_publication": 0.02,
+      "resume": 0.01
     },
     "model_version": "svm_tfidf_v2",
     "classified_at": "2026-04-09T11:00:45Z"
@@ -551,7 +543,7 @@ Manually re-trigger classification (e.g. after a model update).
 
 ```json
 {
-  "job_id": "celery-task-uuid",
+  "job_id": "django-q-task-uuid",
   "message": "Classification job enqueued."
 }
 ```
@@ -688,7 +680,7 @@ Client → POST /api/v1/documents/ (multipart)
        → Django validates MIME type & size
        → File streamed directly to MinIO via boto3
        → Document record saved with storage_key
-       → Celery task enqueued
+       → django-q2 task enqueued
        → 201 response returned immediately
 ```
 
@@ -713,26 +705,39 @@ The ML pipeline lives in `backend/ml/` — pure Python, no Django imports — so
 ### Classification pipeline (`ml/classifier.py`)
 
 ```
-raw file
+raw file (downloaded from MinIO)
   └→ OCR (if image/scanned PDF) via pytesseract
   └→ Text extraction (if native PDF) via pdfminer.six
-  └→ Text cleaning & normalization (preprocessor.py)
-  └→ TF-IDF feature extraction (sklearn TfidfVectorizer)
-  └→ SVM classifier → (label, confidence, all_scores)
+  └→ TF-IDF text features (500 features, unigrams + bigrams)
+  └→ Handcrafted image features (33 features: HOG, text density, edges, margins)
+  └→ Combined hybrid feature vector (533 features)
+  └→ StandardScaler normalization
+  └→ Random Forest classifier (200 trees, GridSearchCV-tuned)
+  └→ (label, confidence, all_scores)
   └→ Save ClassificationResult to DB
   └→ If label == "invoice": enqueue extraction task
 ```
 
+Trained on 400 documents (100 per category) from the RVL-CDIP dataset.
+Achieves **87.5% accuracy** on held-out test data. Ablation study shows
+hybrid (NLP + CV) outperforms text-only (82.5%) and image-only (63.8%).
+
 ### Extraction pipeline (`ml/extractor.py`)
 
 ```
-raw text
-  └→ spaCy NER → candidate entities (ORG, DATE, MONEY)
-  └→ Regex patterns → invoice_number, dates, amounts
-  └→ Heuristic scoring → confidence_map per field
-  └→ Save InvoiceExtraction to DB
+raw file (downloaded from MinIO)
+  └→ OCR text extraction via pytesseract
+  └→ Cascading regex patterns (6 passes for totals, multi-format dates)
+  └→ Company name detection via suffix matching + positional heuristics
+  └→ Currency detection via symbol/code regex (USD, EUR, GBP, etc.)
+  └→ Heuristic confidence scoring → confidence_map per field
+  └→ Save InvoiceExtraction to DB (with raw_text and confidence_map)
   └→ Update Document.status = "done"
 ```
+
+Tested on the SROIE dataset (626 annotated invoice images). Extraction
+accuracy is bounded by OCR quality — ground-truth totals only appear in
+~53% of OCR outputs, giving a theoretical effective ceiling of ~69%.
 
 ### Model versioning
 
@@ -775,9 +780,7 @@ DB_PASSWORD=changeme
 DB_HOST=db
 DB_PORT=5432
 
-# Redis / Celery
-REDIS_URL=redis://:changeme@redis:6379/0
-REDIS_PASSWORD=changeme
+# django-q2 (uses PostgreSQL as broker — no extra config needed)
 
 # MinIO / S3
 MINIO_ENDPOINT=minio:9000

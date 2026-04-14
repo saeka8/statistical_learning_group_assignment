@@ -26,9 +26,9 @@ interface UploadWorkspaceProps {
 
 const sampleGlyphs = {
   invoice: 'INV',
-  contract: 'CTR',
-  technical_report: 'RPT',
   email: 'EML',
+  resume: 'RES',
+  scientific_publication: 'SCI',
 } as const;
 
 const phaseMessages: Record<AnalysisPhase, string> = {
@@ -335,46 +335,4 @@ export function UploadWorkspace({
                     )}
                   </div>
 
-                  <div className={styles.workspaceDock}>
-                    <div className={styles.workspaceDockHeader}>
-                      <div>
-                        <span className={styles.workspaceDockEyebrow}>Workflow summary</span>
-                        <p className={styles.workspaceDockTitle}>{phaseMessage}</p>
-                        <p className={styles.workspaceDockMeta}>{stagedSummary}</p>
-                      </div>
-                      <div className={styles.workspaceDial} aria-hidden="true">
-                        <span className={styles.workspaceDialValue}>
-                          {String(documents.length).padStart(2, '0')}
-                        </span>
-                        <span className={styles.workspaceDialLabel}>staged</span>
-                      </div>
-                    </div>
-
-                    <div className={styles.phaseIndicator}>
-                      <div className={styles.phaseBar}>
-                        <div
-                          className={styles.phaseFill}
-                          style={{ width: phaseProgress[phase] }}
-                        />
-                      </div>
-                      <span className={styles.phaseLabel}>{phaseMessage}</span>
-                    </div>
-
-                    <div className={styles.workspaceSignals}>
-                      {workflowSignals.map((item) => (
-                        <div key={item.label} className={styles.workspaceSignal}>
-                          <span className={styles.workspaceSignalLabel}>{item.label}</span>
-                          <span className={styles.workspaceSignalValue}>{item.value}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </Card>
-            </div>
-          </div>
-        </SectionReveal>
-      </Container>
-    </section>
-  );
-}
+                  <div className={styles.workspaceDock

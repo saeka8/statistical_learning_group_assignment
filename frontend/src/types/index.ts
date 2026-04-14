@@ -1,10 +1,8 @@
 export type DocumentCategory =
   | 'invoice'
-  | 'contract'
-  | 'technical_report'
   | 'email'
-  | 'receipt'
-  | 'letter';
+  | 'resume'
+  | 'scientific_publication';
 
 export interface CategoryScore {
   category: DocumentCategory;
@@ -98,9 +96,3 @@ export type AnalysisPhase =
   | 'extracting_invoice'
   | 'complete'
   | 'error';
-
-export interface AnalysisState {
-  phase: AnalysisPhase;
-  documents: UploadedDocument[];
-  activeDocumentId: string | null;
-}
