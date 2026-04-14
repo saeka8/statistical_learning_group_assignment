@@ -1,0 +1,87 @@
+.shell {
+  position: relative;
+  min-height: 100vh;
+  isolation: isolate;
+}
+
+.ambientGlow,
+.ambientGrid {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+}
+
+.ambientGlow {
+  z-index: 0;
+  background:
+    radial-gradient(circle at 12% 12%, rgba(91, 151, 172, 0.1), transparent 22%),
+    radial-gradient(circle at 84% 10%, rgba(171, 134, 90, 0.08), transparent 20%),
+    radial-gradient(circle at 52% 88%, rgba(32, 56, 77, 0.08), transparent 26%);
+  filter: blur(24px);
+}
+
+.ambientGrid {
+  z-index: 0;
+  background-image:
+    linear-gradient(rgba(16, 24, 32, 0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(16, 24, 32, 0.025) 1px, transparent 1px);
+  background-size: 128px 128px;
+  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.32), transparent 82%);
+  opacity: 0.16;
+}
+
+.main {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: var(--space-8);
+  padding: calc(var(--nav-height) + 1.75rem) 0 3rem;
+}
+
+.hero {
+  display: grid;
+  gap: var(--space-3);
+  max-width: 56rem;
+}
+
+.title {
+  font-size: clamp(2.3rem, 5vw, 4.4rem);
+  letter-spacing: -0.06em;
+}
+
+.subtitle {
+  max-width: 42rem;
+  color: var(--color-text-secondary);
+  font-size: clamp(1rem, 1.6vw, 1.1rem);
+  line-height: 1.75;
+}
+
+.dashboardGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+  gap: var(--space-5);
+  align-items: start;
+}
+
+.errorBanner {
+  margin-bottom: var(--space-5);
+  padding: 0.95rem 1rem;
+  border-radius: 18px;
+  border: 1px solid rgba(179, 109, 115, 0.2);
+  background: rgba(179, 109, 115, 0.08);
+  color: var(--color-text-primary);
+  font-weight: 700;
+}
+
+@media (max-width: 1120px) {
+  .dashboardGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .main {
+    gap: var(--space-6);
+    padding-top: calc(var(--nav-height) + 1.25rem);
+  }
+}

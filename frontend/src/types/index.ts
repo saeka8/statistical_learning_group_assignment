@@ -43,6 +43,34 @@ export interface InvoiceExtractionResult {
   additionalFields?: ExtractedField[];
 }
 
+export interface WorkspaceSummaryTotals {
+  uploads: number;
+  processed: number;
+  errors: number;
+  invoices: number;
+}
+
+export interface WorkspaceSummaryLabel {
+  value: string;
+  count: number;
+}
+
+export interface WorkspaceSummaryActivity {
+  id: string;
+  filename: string;
+  status: 'pending' | 'processing' | 'done' | 'error';
+  label: string | null;
+  confidence?: number | null;
+  createdAt: string;
+}
+
+export interface WorkspaceSummary {
+  totals: WorkspaceSummaryTotals;
+  dominantLabel: WorkspaceSummaryLabel | null;
+  recentInvoiceTotal: string | null;
+  recentActivity: WorkspaceSummaryActivity[];
+}
+
 export type UploadStatus = 'idle' | 'uploading' | 'processing' | 'classified' | 'extracted' | 'error';
 
 export interface UploadedDocument {

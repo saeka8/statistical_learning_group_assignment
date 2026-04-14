@@ -8,7 +8,17 @@ class DocumentListSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Document
-        fields = ["id", "filename", "status", "label", "confidence", "created_at"]
+        fields = [
+            "id",
+            "filename",
+            "content_type",
+            "file_size",
+            "status",
+            "label",
+            "confidence",
+            "created_at",
+            "updated_at",
+        ]
 
     def get_label(self, obj):
         if hasattr(obj, "classification"):
@@ -19,6 +29,22 @@ class DocumentListSerializer(serializers.ModelSerializer):
         if hasattr(obj, "classification"):
             return obj.classification.confidence
         return None
+
+
+class WorkspaceActivitySerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    filename = serializers.CharField()
+    status = serializers.CharField()
+    label = serializers.CharField(allow_null=True)
+    confidence = serializers.FloatField(allow_null=True)
+    created_at = serializers.DateTimeField()
+
+
+class WorkspaceSummarySerializer(serializers.Serializer):
+    totals = serializers.DictField(child=serializers.IntegerField())
+    dominant_label = serializers.DictField(allow_null=True)
+    recent_invoice_total = serializers.CharField(allow_null=True)
+    recent_activity = WorkspaceActivitySerializer(many=True)
 
 
 class DocumentDetailSerializer(serializers.ModelSerializer):

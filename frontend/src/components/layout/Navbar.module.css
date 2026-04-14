@@ -223,6 +223,36 @@
   gap: 0.2rem;
 }
 
+.menuActions {
+  display: grid;
+  gap: 0.7rem;
+  margin-top: 0.9rem;
+}
+
+.menuLink {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0.7rem 1rem;
+  border-radius: 16px;
+  border: 1px solid rgba(16, 24, 32, 0.08);
+  background: rgba(255, 255, 255, 0.78);
+  color: var(--color-text-primary);
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  transition:
+    background var(--duration-normal) var(--ease-out-quart),
+    transform var(--duration-normal) var(--ease-out-quart);
+}
+
+.menuLink:hover {
+  background: rgba(255, 255, 255, 0.96);
+  transform: translateY(-1px);
+}
+
 .menuName {
   font-size: 1.05rem;
   font-weight: 800;
@@ -333,10 +363,11 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .navbar,
-  .navButton,
-  .accountButton,
-  .signOutButton {
-    transition: none;
-  }
+.navbar,
+.navButton,
+.accountButton,
+.menuLink,
+.signOutButton {
+  transition: none;
+}
 }

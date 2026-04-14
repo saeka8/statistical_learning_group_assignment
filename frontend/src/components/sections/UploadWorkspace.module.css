@@ -65,6 +65,17 @@
   gap: var(--space-4);
 }
 
+.errorBanner {
+  padding: 0.95rem 1rem;
+  border-radius: 18px;
+  border: 1px solid rgba(179, 109, 115, 0.2);
+  background: rgba(179, 109, 115, 0.08);
+  color: var(--color-text-primary);
+  font-size: 0.9rem;
+  font-weight: 700;
+  line-height: 1.6;
+}
+
 .dropzone {
   position: relative;
   display: flex;

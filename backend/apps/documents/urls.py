@@ -6,9 +6,11 @@ from .views import (
     ClassifyView,
     ClassifyStatusView,
     ExtractionView,
+    WorkspaceSummaryView,
 )
 
 urlpatterns = [
+    path("workspace/summary/", WorkspaceSummaryView.as_view(), name="workspace-summary"),
     path("documents/", DocumentListCreateView.as_view(), name="document-list"),
     path("documents/<uuid:id>/", DocumentDetailView.as_view(), name="document-detail"),
     path("documents/<uuid:id>/download/", DocumentDownloadView.as_view(), name="document-download"),
