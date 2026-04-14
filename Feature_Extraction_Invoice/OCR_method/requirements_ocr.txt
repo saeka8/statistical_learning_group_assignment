@@ -1,4 +1,5 @@
 easyocr
 opencv-python-headless
+paddleocr
 pillow
 pytesseract
