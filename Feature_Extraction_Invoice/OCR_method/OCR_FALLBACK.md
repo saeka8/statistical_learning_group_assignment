@@ -90,19 +90,19 @@ If you want to use Tesseract:
 Run on one invoice image:
 
 ```bash
-python3 Feature_Extraction_Invoice/OCR_method/extract_invoice_ocr.py --image path/to/invoice.jpg --pretty
+python3 Feature_Extraction_Invoice/OCR_method/extract_invoice_ocr.py --image Feature_Extraction_Invoice/image.png --pretty
 ```
 
 Use a specific engine:
 
 ```bash
-python3 Feature_Extraction_Invoice/extract_invoice_ocr.py --image path/to/invoice.jpg --engine easyocr --pretty
+python3 Feature_Extraction_Invoice/extract_invoice_ocr.py --image Feature_Extraction_Invoice/image.png --engine easyocr --pretty
 ```
 
 Dump raw OCR tokens for debugging:
 
 ```bash
-python3 Feature_Extraction_Invoice/extract_invoice_ocr.py --image path/to/invoice.jpg --dump-ocr ocr_tokens.json --pretty
+python3 Feature_Extraction_Invoice/extract_invoice_ocr.py --Feature_Extraction_Invoice/image.png--dump-ocr ocr_tokens.json --pretty
 ```
 
 ## Recommended Use
