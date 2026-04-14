@@ -1,6 +1,6 @@
 import { AnimatePresence, motion } from 'motion/react';
 import { useEffect, useRef, useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Button } from '../common/Button';
 import { AuthDialog, type AuthMode } from './AuthDialog';
 import { useAuth } from '../../hooks/useAuth';
@@ -136,6 +136,15 @@ export function Navbar() {
                     <div className={styles.menuHeader}>
                       <p className={styles.menuName}>{user.displayName}</p>
                       <p className={styles.menuEmail}>{user.email}</p>
+                    </div>
+                    <div className={styles.menuActions}>
+                      <Link
+                        to="/workspace"
+                        className={styles.menuLink}
+                        onClick={() => setMenuOpen(false)}
+                      >
+                        Workspace
+                      </Link>
                     </div>
                     <button
                       type="button"
