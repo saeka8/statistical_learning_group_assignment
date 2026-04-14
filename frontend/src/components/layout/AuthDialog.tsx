@@ -1,10 +1,22 @@
 import { AnimatePresence, motion } from 'motion/react';
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
+import { createPortal } from 'react-dom';
 import { usePrefersReducedMotion } from '../../hooks/usePrefersReducedMotion';
+import { ApiRequestError } from '../../services/api';
 import { Button } from '../common/Button';
 import styles from './AuthDialog.module.css';
 
 export type AuthMode = 'login' | 'signup';
+
+type AuthFieldKey =
+  | 'loginUsername'
+  | 'loginPassword'
+  | 'signupDisplayName'
+  | 'signupUsername'
+  | 'signupEmail'
+  | 'signupPassword';
+
+type AuthFieldErrors = Partial<Record<AuthFieldKey, string>>;
 
 interface AuthDialogProps {
   isOpen: boolean;
@@ -41,7 +53,8 @@ export function AuthDialog({
   const [signupPassword, setSignupPassword] = useState('');
 
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [generalError, setGeneralError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<AuthFieldErrors>({});
 
   // Lock scroll and handle Escape key
   useEffect(() => {
@@ -70,7 +83,8 @@ export function AuthDialog({
 
   // Clear error when switching modes
   useEffect(() => {
-    setError(null);
+    setGeneralError(null);
+    setFieldErrors({});
   }, [mode]);
 
   const resetFormFields = () => {
@@ -80,7 +94,29 @@ export function AuthDialog({
     setSignupUsername('');
     setSignupEmail('');
     setSignupPassword('');
-    setError(null);
+    setGeneralError(null);
+    setFieldErrors({});
+  };
+
+  const clearFieldError = (field: AuthFieldKey) => {
+    setFieldErrors((prev) => {
+      if (!prev[field]) return prev;
+      const next = { ...prev };
+      delete next[field];
+      return next;
+    });
+  };
+
+  const handleApiErrors = (err: unknown, mappedFieldErrors: AuthFieldErrors, fallbackMessage: string) => {
+    setFieldErrors(mappedFieldErrors);
+
+    const hasFieldErrors = Object.values(mappedFieldErrors).some(Boolean);
+    if (hasFieldErrors) {
+      setGeneralError(null);
+      return;
+    }
+
+    setGeneralError(err instanceof Error ? err.message : fallbackMessage);
   };
 
   const handleLoginSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -90,13 +126,22 @@ export function AuthDialog({
     if (!username || !password) return;
 
     setSubmitting(true);
-    setError(null);
+    setGeneralError(null);
+    setFieldErrors({});
     try {
       await onLogin(username, password);
       resetFormFields();
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Login failed. Please try again.');
+      const mappedFieldErrors: AuthFieldErrors =
+        err instanceof ApiRequestError
+          ? {
+              loginUsername: err.fieldErrors.username?.[0],
+              loginPassword: err.fieldErrors.password?.[0],
+            }
+          : {};
+
+      handleApiErrors(err, mappedFieldErrors, 'Login failed. Please try again.');
     } finally {
       setSubmitting(false);
     }
@@ -111,13 +156,24 @@ export function AuthDialog({
     if (!username || !email || !password) return;
 
     setSubmitting(true);
-    setError(null);
+    setGeneralError(null);
+    setFieldErrors({});
     try {
       await onRegister(username, email, password, displayName || undefined);
       resetFormFields();
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Registration failed. Please try again.');
+      const mappedFieldErrors: AuthFieldErrors =
+        err instanceof ApiRequestError
+          ? {
+              signupDisplayName: err.fieldErrors.display_name?.[0],
+              signupUsername: err.fieldErrors.username?.[0],
+              signupEmail: err.fieldErrors.email?.[0],
+              signupPassword: err.fieldErrors.password?.[0],
+            }
+          : {};
+
+      handleApiErrors(err, mappedFieldErrors, 'Registration failed. Please try again.');
     } finally {
       setSubmitting(false);
     }
@@ -127,7 +183,11 @@ export function AuthDialog({
   const loginPanelId = `${id}-login-panel`;
   const signupPanelId = `${id}-signup-panel`;
 
-  return (
+  if (typeof document === 'undefined') {
+    return null;
+  }
+
+  return createPortal(
     <AnimatePresence>
       {isOpen ? (
         <motion.div
@@ -149,14 +209,16 @@ export function AuthDialog({
             exit={reducedMotion ? undefined : { opacity: 0, y: 18, scale: 0.99 }}
             transition={{ duration: reducedMotion ? 0 : 0.32, ease: [0.16, 1, 0.3, 1] }}
           >
-            <button
-              type="button"
-              className={styles.closeButton}
-              onClick={onClose}
-              aria-label="Close authentication dialog"
-            >
-              <span aria-hidden="true">x</span>
-            </button>
+            <div className={styles.dialogChrome}>
+              <button
+                type="button"
+                className={styles.closeButton}
+                onClick={onClose}
+                aria-label="Close authentication dialog"
+              >
+                <span aria-hidden="true">x</span>
+              </button>
+            </div>
 
             <div className={styles.dialogGrid}>
               <aside className={styles.storyPanel}>
@@ -214,10 +276,10 @@ export function AuthDialog({
                   </button>
                 </div>
 
-                {error ? (
+                {generalError ? (
                   <div className={styles.previewNotice} role="alert">
                     <span className={styles.previewDot} aria-hidden="true" />
-                    {error}
+                    {generalError}
                   </div>
                 ) : null}
 
@@ -238,9 +300,24 @@ export function AuthDialog({
                           name="username"
                           autoComplete="username"
                           value={loginUsername}
+                          aria-invalid={fieldErrors.loginUsername ? 'true' : 'false'}
+                          aria-describedby={fieldErrors.loginUsername ? `${id}-login-username-error` : undefined}
                           disabled={submitting}
-                          onChange={(event) => setLoginUsername(event.target.value)}
+                          onChange={(event) => {
+                            setLoginUsername(event.target.value);
+                            clearFieldError('loginUsername');
+                            setGeneralError(null);
+                          }}
                         />
+                        {fieldErrors.loginUsername ? (
+                          <span
+                            id={`${id}-login-username-error`}
+                            className={styles.fieldError}
+                            role="status"
+                          >
+                            {fieldErrors.loginUsername}
+                          </span>
+                        ) : null}
                       </label>
 
                       <label className={styles.field}>
@@ -251,9 +328,24 @@ export function AuthDialog({
                           name="password"
                           autoComplete="current-password"
                           value={loginPassword}
+                          aria-invalid={fieldErrors.loginPassword ? 'true' : 'false'}
+                          aria-describedby={fieldErrors.loginPassword ? `${id}-login-password-error` : undefined}
                           disabled={submitting}
-                          onChange={(event) => setLoginPassword(event.target.value)}
+                          onChange={(event) => {
+                            setLoginPassword(event.target.value);
+                            clearFieldError('loginPassword');
+                            setGeneralError(null);
+                          }}
                         />
+                        {fieldErrors.loginPassword ? (
+                          <span
+                            id={`${id}-login-password-error`}
+                            className={styles.fieldError}
+                            role="status"
+                          >
+                            {fieldErrors.loginPassword}
+                          </span>
+                        ) : null}
                       </label>
 
                       <div className={styles.actionRow}>
@@ -285,9 +377,24 @@ export function AuthDialog({
                           name="displayName"
                           autoComplete="name"
                           value={signupName}
+                          aria-invalid={fieldErrors.signupDisplayName ? 'true' : 'false'}
+                          aria-describedby={fieldErrors.signupDisplayName ? `${id}-signup-display-name-error` : undefined}
                           disabled={submitting}
-                          onChange={(event) => setSignupName(event.target.value)}
+                          onChange={(event) => {
+                            setSignupName(event.target.value);
+                            clearFieldError('signupDisplayName');
+                            setGeneralError(null);
+                          }}
                         />
+                        {fieldErrors.signupDisplayName ? (
+                          <span
+                            id={`${id}-signup-display-name-error`}
+                            className={styles.fieldError}
+                            role="status"
+                          >
+                            {fieldErrors.signupDisplayName}
+                          </span>
+                        ) : null}
                       </label>
 
                       <label className={styles.field}>
@@ -298,9 +405,24 @@ export function AuthDialog({
                           name="username"
                           autoComplete="username"
                           value={signupUsername}
+                          aria-invalid={fieldErrors.signupUsername ? 'true' : 'false'}
+                          aria-describedby={fieldErrors.signupUsername ? `${id}-signup-username-error` : undefined}
                           disabled={submitting}
-                          onChange={(event) => setSignupUsername(event.target.value)}
+                          onChange={(event) => {
+                            setSignupUsername(event.target.value);
+                            clearFieldError('signupUsername');
+                            setGeneralError(null);
+                          }}
                         />
+                        {fieldErrors.signupUsername ? (
+                          <span
+                            id={`${id}-signup-username-error`}
+                            className={styles.fieldError}
+                            role="status"
+                          >
+                            {fieldErrors.signupUsername}
+                          </span>
+                        ) : null}
                       </label>
 
                       <label className={styles.field}>
@@ -311,9 +433,24 @@ export function AuthDialog({
                           name="email"
                           autoComplete="email"
                           value={signupEmail}
+                          aria-invalid={fieldErrors.signupEmail ? 'true' : 'false'}
+                          aria-describedby={fieldErrors.signupEmail ? `${id}-signup-email-error` : undefined}
                           disabled={submitting}
-                          onChange={(event) => setSignupEmail(event.target.value)}
+                          onChange={(event) => {
+                            setSignupEmail(event.target.value);
+                            clearFieldError('signupEmail');
+                            setGeneralError(null);
+                          }}
                         />
+                        {fieldErrors.signupEmail ? (
+                          <span
+                            id={`${id}-signup-email-error`}
+                            className={styles.fieldError}
+                            role="status"
+                          >
+                            {fieldErrors.signupEmail}
+                          </span>
+                        ) : null}
                       </label>
 
                       <label className={styles.field}>
@@ -324,9 +461,24 @@ export function AuthDialog({
                           name="signupPassword"
                           autoComplete="new-password"
                           value={signupPassword}
+                          aria-invalid={fieldErrors.signupPassword ? 'true' : 'false'}
+                          aria-describedby={fieldErrors.signupPassword ? `${id}-signup-password-error` : undefined}
                           disabled={submitting}
-                          onChange={(event) => setSignupPassword(event.target.value)}
+                          onChange={(event) => {
+                            setSignupPassword(event.target.value);
+                            clearFieldError('signupPassword');
+                            setGeneralError(null);
+                          }}
                         />
+                        {fieldErrors.signupPassword ? (
+                          <span
+                            id={`${id}-signup-password-error`}
+                            className={styles.fieldError}
+                            role="status"
+                          >
+                            {fieldErrors.signupPassword}
+                          </span>
+                        ) : null}
                       </label>
 
                       <div className={styles.actionRow}>
@@ -348,5 +500,7 @@ export function AuthDialog({
         </motion.div>
       ) : null}
     </AnimatePresence>
+    ,
+    document.body
   );
 }

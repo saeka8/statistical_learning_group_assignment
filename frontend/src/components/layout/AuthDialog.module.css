@@ -1,10 +1,12 @@
 .backdrop {
   position: fixed;
   inset: 0;
-  z-index: 8;
+  z-index: calc(var(--z-nav) + 1);
   display: grid;
   place-items: center;
   padding: clamp(1rem, 4vw, 2rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   background:
     linear-gradient(180deg, rgba(10, 15, 20, 0.32), rgba(10, 15, 20, 0.18)),
     radial-gradient(circle at top, rgba(255, 255, 255, 0.22), transparent 38%);
@@ -14,7 +16,9 @@
 
 .dialog {
   position: relative;
+  display: grid;
   width: min(100%, 1020px);
+  max-height: calc(100dvh - clamp(2rem, 8vw, 4rem));
   border-radius: 34px;
   border: 1px solid rgba(255, 255, 255, 0.78);
   background:
@@ -23,7 +27,11 @@
   box-shadow:
     0 38px 92px rgba(16, 24, 32, 0.2),
     inset 0 1px 0 rgba(255, 255, 255, 0.82);
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(86, 124, 142, 0.72) transparent;
 }
 
 .dialog::before {
@@ -36,11 +44,36 @@
     radial-gradient(circle at 88% 86%, rgba(171, 134, 90, 0.12), transparent 24%);
 }
 
+.dialog::-webkit-scrollbar {
+  width: 10px;
+}
+
+.dialog::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.dialog::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background:
+    linear-gradient(180deg, rgba(91, 151, 172, 0.72), rgba(171, 134, 90, 0.72)) padding-box,
+    transparent border-box;
+}
+
+.dialogChrome {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  display: flex;
+  justify-content: flex-end;
+  padding: 1rem 1rem 0;
+  margin-bottom: -2.6rem;
+  pointer-events: none;
+}
+
 .closeButton {
-  position: absolute;
-  top: 1rem;
-  right: 1rem;
-  z-index: 2;
+  position: relative;
+  z-index: 1;
   width: 40px;
   height: 40px;
   display: inline-flex;
@@ -51,6 +84,7 @@
   background: rgba(255, 255, 255, 0.72);
   border: 1px solid rgba(16, 24, 32, 0.08);
   box-shadow: 0 10px 24px rgba(16, 24, 32, 0.08);
+  pointer-events: auto;
   transition:
     transform var(--duration-normal) var(--ease-out-quart),
     color var(--duration-fast),
@@ -72,6 +106,7 @@
   position: relative;
   z-index: 1;
   display: grid;
+  min-height: 100%;
   grid-template-columns: minmax(280px, 0.92fr) minmax(0, 1.08fr);
 }
 
@@ -236,6 +271,12 @@
   gap: 0.45rem;
 }
 
+.fieldError {
+  font-size: 0.8rem;
+  line-height: 1.55;
+  color: #b4544b;
+}
+
 .fieldLabel {
   font-size: 0.72rem;
   font-weight: 800;
@@ -272,6 +313,13 @@
     0 0 0 4px rgba(91, 151, 172, 0.12),
     0 14px 30px rgba(16, 24, 32, 0.08);
   transform: translateY(-1px);
+}
+
+.input[aria-invalid='true'] {
+  border-color: rgba(180, 84, 75, 0.35);
+  box-shadow:
+    0 0 0 4px rgba(180, 84, 75, 0.08),
+    0 12px 24px rgba(16, 24, 32, 0.06);
 }
 
 .actionRow {

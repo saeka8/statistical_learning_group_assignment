@@ -1,4 +1,12 @@
-import { useCallback, useRef, useState, type ChangeEvent, type DragEvent } from 'react';
+import {
+  useCallback,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type ClipboardEvent,
+  type DragEvent,
+  type FocusEvent,
+} from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { sampleDocuments } from '../../data/sampleData';
 import { usePrefersReducedMotion } from '../../hooks/usePrefersReducedMotion';
@@ -71,9 +79,33 @@ export function UploadWorkspace({
   onSetActive,
 }: UploadWorkspaceProps) {
   const [isDragging, setIsDragging] = useState(false);
+  const [isPasteFocused, setIsPasteFocused] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const reducedMotion = usePrefersReducedMotion();
   const dragCounter = useRef(0);
+
+  const extractClipboardFiles = useCallback((clipboardData: DataTransfer | null) => {
+    if (!clipboardData) return [];
+
+    return Array.from(clipboardData.items)
+      .filter((item) => item.kind === 'file')
+      .map((item, index) => {
+        const file = item.getAsFile();
+        if (!file) return null;
+
+        const extension = file.type.split('/')[1] ?? 'png';
+        const fileName =
+          file.name && file.name.trim().length > 0
+            ? file.name
+            : `pasted-document-${Date.now()}-${index + 1}.${extension}`;
+
+        return new File([file], fileName, {
+          type: file.type || 'image/png',
+          lastModified: file.lastModified || Date.now(),
+        });
+      })
+      .filter((file): file is File => file !== null);
+  }, []);
 
   const handleDragEnter = useCallback((e: DragEvent) => {
     e.preventDefault();
@@ -112,6 +144,27 @@ export function UploadWorkspace({
     [onAddFiles]
   );
 
+  const handlePaste = useCallback(
+    (e: ClipboardEvent<HTMLDivElement>) => {
+      const files = extractClipboardFiles(e.clipboardData);
+      if (files.length === 0) return;
+
+      e.preventDefault();
+      onAddFiles(files);
+    },
+    [extractClipboardFiles, onAddFiles]
+  );
+
+  const handleFocus = useCallback(() => {
+    setIsPasteFocused(true);
+  }, []);
+
+  const handleBlur = useCallback((e: FocusEvent<HTMLDivElement>) => {
+    if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
+      setIsPasteFocused(false);
+    }
+  }, []);
+
   const isProcessing = [
     'uploading',
     'preprocessing',
@@ -148,14 +201,17 @@ export function UploadWorkspace({
             <div className={styles.uploadCol}>
               <Card variant="glass" padding="lg">
                 <div
-                  className={`${styles.dropzone} ${isDragging ? styles.dropzoneActive : ''}`}
+                  className={`${styles.dropzone} ${isDragging ? styles.dropzoneActive : ''} ${isPasteFocused ? styles.dropzoneFocused : ''}`}
                   onDragEnter={handleDragEnter}
                   onDragLeave={handleDragLeave}
                   onDragOver={handleDragOver}
                   onDrop={handleDrop}
+                  onPaste={handlePaste}
+                  onFocus={handleFocus}
+                  onBlur={handleBlur}
                   role="button"
                   tabIndex={0}
-                  aria-label="Upload documents by drag and drop or click to browse"
+                  aria-label="Upload documents by drag and drop, click to browse, or paste when focused"
                   onClick={() => fileInputRef.current?.click()}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' || e.key === ' ') {
@@ -206,7 +262,13 @@ export function UploadWorkspace({
                   <p className={styles.dropzoneTitle}>
                     {isDragging ? 'Release to stage the document' : 'Drag in a document'}
                   </p>
-                  <p className={styles.dropzoneHint}>PDF, PNG, JPG, TIFF - or click to browse</p>
+                  <p className={styles.dropzoneHint}>
+                    PDF, PNG, JPG, TIFF - click, drag, or focus here and press Ctrl+V
+                  </p>
+                  <p className={styles.dropzonePasteHint}>
+                    <span className={styles.pasteKey}>Ctrl+V</span>
+                    {isPasteFocused ? 'Paste screenshot ready' : 'Paste works while this area is focused'}
+                  </p>
                 </div>
 
                 <div className={styles.samples}>

@@ -116,6 +116,13 @@
   box-shadow: 0 30px 56px rgba(16, 24, 32, 0.12);
 }
 
+.dropzoneFocused {
+  border-color: rgba(91, 151, 172, 0.34);
+  box-shadow:
+    0 30px 56px rgba(16, 24, 32, 0.12),
+    0 0 0 4px rgba(91, 151, 172, 0.12);
+}
+
 .dropzoneActive {
   border-color: var(--color-accent-blue) !important;
   background:
@@ -150,6 +157,40 @@
   z-index: 1;
   font-size: var(--text-sm);
   color: var(--color-text-secondary);
+}
+
+.dropzonePasteHint {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin-top: 0.3rem;
+  padding: 0.55rem 0.75rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid rgba(91, 151, 172, 0.12);
+  box-shadow: 0 12px 24px rgba(16, 24, 32, 0.06);
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: var(--color-text-secondary);
+}
+
+.pasteKey {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 3.2rem;
+  min-height: 1.85rem;
+  padding: 0.25rem 0.55rem;
+  border-radius: 999px;
+  background: var(--gradient-ink);
+  color: #f6fbff;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  box-shadow: 0 10px 20px rgba(20, 36, 52, 0.16);
 }
 
 .samples {
