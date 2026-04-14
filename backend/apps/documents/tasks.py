@@ -44,12 +44,12 @@ def run_classification(document_id: str) -> None:
             document_id, result["predicted_label"], result["confidence"],
         )
 
-        # If classified as invoice, automatically enqueue extraction
-        if result["predicted_label"] == "invoice":
-            from django_q.tasks import async_task
-
-            async_task("apps.documents.tasks.run_extraction", str(doc.id))
-            logger.info("Invoice detected — extraction task enqueued for %s.", document_id)
+        # NOTE: invoice extraction is owned by the YOLO module
+        # (Feature_Extraction_Invoice/). Wire it in below when ready, e.g.:
+        #
+        #     if result["predicted_label"] == "invoice":
+        #         from django_q.tasks import async_task
+        #         async_task("apps.documents.tasks.run_extraction", str(doc.id))
 
     except Exception as exc:
         logger.exception("Classification failed for document %s: %s", document_id, exc)
@@ -60,32 +60,38 @@ def run_classification(document_id: str) -> None:
 
 def run_extraction(document_id: str) -> None:
     """
-    Async task: extract structured fields from an invoice document.
+    Async task stub — invoice field extraction.
 
-    Automatically enqueued by run_classification when predicted_label == 'invoice'.
+    The extraction module is owned by the YOLO field-detection pipeline
+    in `Feature_Extraction_Invoice/`. This function is intentionally a
+    stub so the existing seam (model + serializer + view) stays in place;
+    plug the YOLO inference call in here and write the resulting fields
+    into `InvoiceExtraction`.
+
+    Reference signature for whoever wires it up:
+
+        fields = {
+            "invoice_number": ...,
+            "invoice_date":   ...,   # date | None
+            "due_date":       ...,   # date | None
+            "issuer_name":    ...,
+            "recipient_name": ...,
+            "total_amount":   ...,   # Decimal | None
+            "currency":       ...,
+            "raw_text":       ...,
+            "confidence_map": {...},
+        }
+        InvoiceExtraction.objects.update_or_create(document=doc, defaults=fields)
     """
-    from .models import Document, DocumentStatus, InvoiceExtraction
+    from .models import Document
 
     try:
-        doc = Document.objects.get(id=document_id)
+        Document.objects.get(id=document_id)
     except Document.DoesNotExist:
         logger.error("Extraction task: document %s not found.", document_id)
         return
 
-    try:
-        from ml.extractor import extract_invoice_fields
-
-        fields = extract_invoice_fields(doc.storage_key, doc.content_type)
-
-        InvoiceExtraction.objects.update_or_create(document=doc, defaults=fields)
-
-        doc.status = DocumentStatus.DONE
-        doc.save(update_fields=["status"])
-
-        logger.info("Invoice extraction complete for document %s.", document_id)
-
-    except Exception as exc:
-        logger.exception("Extraction failed for document %s: %s", document_id, exc)
-        doc.status = DocumentStatus.ERROR
-        doc.save(update_fields=["status"])
-        raise
+    logger.warning(
+        "run_extraction stub called for %s — YOLO pipeline not yet wired in.",
+        document_id,
+    )
