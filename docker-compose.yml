@@ -59,6 +59,20 @@ services:
       api:
         condition: service_started
 
+  frontend:
+    build:
+      context: ./frontend
+      target: dev
+    environment:
+      API_URL: http://api:8000
+    volumes:
+      - ./frontend/src:/app/src
+      - ./frontend/public:/app/public
+    ports:
+      - "5173:5173"
+    depends_on:
+      - api
+
 volumes:
   postgres_data:
   minio_data:
