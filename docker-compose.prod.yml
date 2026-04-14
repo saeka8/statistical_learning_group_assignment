@@ -29,6 +29,14 @@ services:
       db:
         condition: service_healthy
 
+  frontend:
+    build:
+      context: ./frontend
+      target: serve
+    restart: always
+    depends_on:
+      - api
+
   nginx:
     image: nginx:alpine
     volumes:
@@ -38,4 +46,5 @@ services:
       - "443:443"
     depends_on:
       - api
+      - frontend
     restart: always
