@@ -23,6 +23,10 @@ dist/
 .env
 .env.*
 
+.claude/
+.vscode/
+.idea/
+
 .DS_Store
 Thumbs.db
 
