@@ -7,7 +7,11 @@
       "Bash(node ./node_modules/typescript/bin/tsc --noEmit)",
       "Bash(node node_modules/typescript/bin/tsc --noEmit)",
       "Bash(node_modules/.bin/tsc --noEmit)",
-      "Bash(echo \"exit:$?\")"
+      "Bash(echo \"exit:$?\")",
+      "Bash(docker.exe compose:*)",
+      "Read(//c/Program Files/Docker/Docker/resources/**)",
+      "Read(//c/Users/oskar/AppData/Local/Docker/wsl/**)",
+      "Bash(cmd.exe /c \"where docker\")"
     ]
   }
 }

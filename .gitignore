@@ -51,3 +51,10 @@ Feature_Extraction_Invoice/runs/**/weights/last.pt
 Feature_Extraction_Invoice/runs/**/train_batch*.jpg
 Feature_Extraction_Invoice/runs/**/labels.jpg
 Feature_Extraction_Invoice/label_previews/
+
+
+Feature_Extraction_Invoice/paragraph_yolo/predictions
+Feature_Extraction_Invoice/paragraph_yolo/prepared
+Feature_Extraction_Invoice/paragraph_yolo/runs/paragraph_table
+Feature_Extraction_Invoice/paragraph_yolo/train
+Feature_Extraction_Invoice/paragraph_yolo/region_ocr/invoice_grouped_ocr

@@ -28,10 +28,14 @@ def api_exception_handler(exc, context):
 
     # DRF validation errors have a dict / list structure
     if isinstance(response.data, dict):
+        # "detail" is used by DRF for non-validation errors (404, 401, etc.)
+        detail = response.data.pop("detail", None)
+        if detail:
+            message = str(detail)
         non_field = response.data.pop("non_field_errors", None)
         if non_field:
             message = " ".join(str(e) for e in non_field)
-        # Remaining keys are field errors
+        # Remaining keys are field-level validation errors
         field_errors = {
             k: [str(e) for e in v] if isinstance(v, list) else [str(v)]
             for k, v in response.data.items()
