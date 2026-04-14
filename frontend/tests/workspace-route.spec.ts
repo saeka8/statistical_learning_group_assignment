@@ -37,6 +37,7 @@ test('guests are redirected away from the workspace route and can continue after
   await page.goto('/workspace');
 
   await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByRole('button', { name: /^log in$/i })).toBeVisible();
 
   const dialog = page.getByRole('dialog', { name: /log in to doclens/i });
   await expect(dialog).toBeVisible();
