@@ -78,7 +78,7 @@ This tries:
 Project-level OCR extras:
 
 ```bash
-python3 -m pip install -r Feature_Extraction_Invoice/requirements_ocr.txt
+python3 -m pip install -r Feature_Extraction_Invoice/OCR_method/requirements_ocr.txt
 ```
 
 If you want to use Tesseract:
