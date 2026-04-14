@@ -36,7 +36,7 @@
 }
 
 .processing .label {
-  color: #d97706;
+  color: var(--color-accent-amber);
 }
 
 .classified .dot {
@@ -52,7 +52,7 @@
 }
 
 .extracted .label {
-  color: #059669;
+  color: var(--color-accent-emerald);
 }
 
 .error .dot {
@@ -60,7 +60,7 @@
 }
 
 .error .label {
-  color: #e11d48;
+  color: var(--color-accent-rose);
 }
 
 @keyframes pulse {

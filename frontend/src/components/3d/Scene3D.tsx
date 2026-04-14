@@ -4,6 +4,9 @@ export function Scene3D() {
   return (
     <div className={styles.visual}>
       <div className={styles.mockup} aria-hidden="true">
+        <span className={styles.signalHalo} />
+        <span className={styles.signalHaloSecondary} />
+
         <div className={styles.chrome}>
           <div className={styles.chromeDots}>
             <span className={styles.dot} />
@@ -21,6 +24,9 @@ export function Scene3D() {
             </div>
 
             <div className={styles.previewPaper}>
+              <span className={styles.scanLine} />
+              <span className={styles.scanGlow} />
+
               <div className={styles.paperTopRow}>
                 <span className={styles.paperMark} />
                 <span className={styles.paperLineShort} />
@@ -37,7 +43,20 @@ export function Scene3D() {
           <div className={styles.resultPane}>
             <div className={styles.resultHeader}>
               <span className={styles.resultBadge}>Invoice</span>
-              <span className={styles.confidence}>94.3%</span>
+              <div className={styles.confidenceCluster}>
+                <span className={styles.liveSignal}>
+                  <span className={styles.liveDot} />
+                  Live
+                </span>
+                <span className={styles.confidence}>94.3%</span>
+              </div>
+            </div>
+
+            <div className={styles.statusRail}>
+              <span className={styles.statusRailLabel}>Extraction in sync</span>
+              <span className={styles.statusRailTrack}>
+                <span className={styles.statusRailFill} />
+              </span>
             </div>
 
             <div className={styles.fieldGrid}>
@@ -45,7 +64,7 @@ export function Scene3D() {
                 <span className={styles.fieldLabel}>Invoice Number</span>
                 <span className={styles.fieldValue}>INV-2025-00847</span>
               </div>
-              <div className={styles.fieldCard}>
+              <div className={`${styles.fieldCard} ${styles.fieldCardPulse}`}>
                 <span className={styles.fieldLabel}>Due Date</span>
                 <span className={styles.fieldValue}>2025-02-14</span>
               </div>

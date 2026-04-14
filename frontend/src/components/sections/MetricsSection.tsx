@@ -41,7 +41,7 @@ export function MetricsSection() {
                     <AnimatedCounter
                       target={metric.value}
                       suffix={metric.suffix}
-                      decimals={metric.suffix === 's' ? 1 : metric.suffix === '%' ? 1 : 0}
+                      decimals={metric.suffix === 'ms' ? 0 : 1}
                     />
                   ) : (
                     `0${metric.suffix}`
@@ -67,7 +67,7 @@ export function MetricsSection() {
             <div className={styles.miniDivider} aria-hidden="true" />
             <div className={styles.miniStat}>
               <span className={styles.miniValue}>533</span>
-              <span className={styles.miniLabel}>Hybrid Features (NLP + CV)</span>
+              <span className={styles.miniLabel}>Hybrid Features</span>
             </div>
             <div className={styles.miniDivider} aria-hidden="true" />
             <div className={styles.miniStat}>
@@ -76,7 +76,4 @@ export function MetricsSection() {
             </div>
           </div>
         </SectionReveal>
-      </Container>
-    </section>
-  );
-}
+      </Con

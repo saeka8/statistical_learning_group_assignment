@@ -48,10 +48,20 @@ export function useAnalysis(): UseAnalysisReturn {
     }
   }, []);
 
-  const removeDocument = useCallback((id: string) => {
-    setDocuments((prev) => prev.filter((d) => d.id !== id));
-    setActiveDocumentId((curr) => (curr === id ? null : curr));
-  }, []);
+  const removeDocument = useCallback(
+    (id: string) => {
+      const removedIndex = documents.findIndex((doc) => doc.id === id);
+      const remaining = documents.filter((doc) => doc.id !== id);
+
+      setDocuments(remaining);
+      setActiveDocumentId((curr) => {
+        if (curr !== id) return curr;
+
+        return remaining[removedIndex]?.id ?? remaining[removedIndex - 1]?.id ?? null;
+      });
+    },
+    [documents]
+  );
 
   const loadSample = useCallback((sampleId: string) => {
     const sample = sampleDocuments.find((s) => s.id === sampleId);
@@ -144,7 +154,10 @@ export function useAnalysis(): UseAnalysisReturn {
     }
 
     setPhase('complete');
-    setActiveDocumentId((curr) => curr ?? documents[0]?.id ?? null);
+    setActiveDocumentId((curr) => {
+      if (curr && documents.some((doc) => doc.id === curr)) return curr;
+      return documents[0]?.id ?? null;
+    });
   }, [documents, simulateAnalysis, updateDoc]);
 
   const reset = useCallback(() => {

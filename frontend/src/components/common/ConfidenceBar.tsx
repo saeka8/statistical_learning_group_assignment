@@ -23,10 +23,10 @@ export function ConfidenceBar({
 }: ConfidenceBarProps) {
   const reducedMotion = usePrefersReducedMotion();
   const [displayWidth, setDisplayWidth] = useState(reducedMotion || !animate ? value * 100 : 0);
+  const width = reducedMotion || !animate ? value * 100 : displayWidth;
 
   useEffect(() => {
     if (reducedMotion || !animate) {
-      setDisplayWidth(value * 100);
       return;
     }
     const timer = setTimeout(() => setDisplayWidth(value * 100), 100);
@@ -54,7 +54,7 @@ export function ConfidenceBar({
         <div
           className={styles.fill}
           style={{
-            width: `${displayWidth}%`,
+            width: `${width}%`,
             background: color,
           }}
         />

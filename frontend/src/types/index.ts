@@ -96,9 +96,3 @@ export type AnalysisPhase =
   | 'extracting_invoice'
   | 'complete'
   | 'error';
-
-export interface AnalysisState {
-  phase: AnalysisPhase;
-  documents: UploadedDocument[];
-  activeDocumentId: string | null;
-}
