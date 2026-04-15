@@ -182,8 +182,8 @@ def _ocr_crop_tesseract(crop: Image.Image, lang: str = "eng+fra") -> list[_OCRLi
         text = str(text).strip()
         if not text:
             continue
-        conf = float(data["conf"][i])
-        if conf < 0:
+        conf = float(data["conf"][i]) / 100.0
+        if conf <= 0.3:
             continue
         xmin = float(data["left"][i])
         ymin = float(data["top"][i])
@@ -191,7 +191,7 @@ def _ocr_crop_tesseract(crop: Image.Image, lang: str = "eng+fra") -> list[_OCRLi
         h = float(data["height"][i])
         tokens.append(_OCRToken(
             text=text,
-            confidence=conf / 100.0,
+            confidence=conf,
             xmin=xmin, ymin=ymin,
             xmax=xmin + w, ymax=ymin + h,
         ))
@@ -200,19 +200,32 @@ def _ocr_crop_tesseract(crop: Image.Image, lang: str = "eng+fra") -> list[_OCRLi
     return _group_lines(tokens)
 
 
+_COLUMN_GAP_FACTOR = 4.0  # horizontal gap > this × median height = different column
+
+
 def _group_lines(tokens: list[_OCRToken]) -> list[_OCRLine]:
     if not tokens:
         return []
+
+    heights = sorted(t.height for t in tokens)
+    median_height = heights[len(heights) // 2]
+    y_tolerance = max(6.0, median_height * 0.5)
+    gap_threshold = median_height * _COLUMN_GAP_FACTOR
+
     lines: list[list[_OCRToken]] = []
     for token in tokens:
         placed = False
         for line_tokens in lines:
             avg_y = sum(t.center_y for t in line_tokens) / len(line_tokens)
-            avg_h = sum(t.height for t in line_tokens) / len(line_tokens)
-            if abs(token.center_y - avg_y) <= max(10.0, avg_h * 0.6):
-                line_tokens.append(token)
-                placed = True
-                break
+            if abs(token.center_y - avg_y) > y_tolerance:
+                continue
+            line_xmin = min(t.xmin for t in line_tokens)
+            line_xmax = max(t.xmax for t in line_tokens)
+            if token.xmin > line_xmax + gap_threshold or token.xmax < line_xmin - gap_threshold:
+                continue
+            line_tokens.append(token)
+            placed = True
+            break
         if not placed:
             lines.append([token])
 
@@ -244,7 +257,14 @@ _FIELD_NAMES = [
     "Invoice_Number", "Invoice_Date", "Client_Name", "Client_Email",
     "Client_Phone", "Billing_Address", "Shipping_Address", "Products",
     "Subtotal", "VAT", "Total", "Discount", "VAT_Rate", "Discount_Rate", "Due_Date",
+    "Issuer_Name",
 ]
+
+# Anchors that indicate a region belongs to the issuer/sender block
+_ISSUER_ANCHORS = (
+    "from:", "issued by", "emis par", "emetteur", "vendeur",
+    "fournisseur", "societe", "supplier", "seller",
+)
 
 
 def _normalize(text: str) -> str:
@@ -383,6 +403,9 @@ def _extract_fields_from_regions(regions: list) -> dict:
         if any(a in norm for a in ("description", "designation", "item", "items", "products")):
             _set_field(payload, "Products", _extract_products(lines), "paragraph_region_products", text)
 
+        if any(a in norm for a in _ISSUER_ANCHORS):
+            _set_field(payload, "Issuer_Name", _extract_name(lines), "issuer_region", text)
+
         if any(a in norm for a in ("billed to", "bill to", "invoice to", "customer")):
             _set_field(payload, "Client_Name", _extract_name(lines), "billing_region", text)
             _set_field(payload, "Billing_Address", _extract_address_lines(lines), "billing_region", text)
@@ -442,6 +465,24 @@ def _extract_fields_from_regions(regions: list) -> dict:
             _set_field(payload, "Invoice_Date", _first_date(line), "global_scan", line)
         if "due" in ln:
             _set_field(payload, "Due_Date", _first_date(line), "global_scan", line)
+
+    # Issuer fallback: topmost paragraph region that isn't a billing/metadata/totals block
+    if payload["Issuer_Name"]["value"] is None:
+        _skip = (
+            "billed to", "bill to", "invoice to", "ship to", "shipping",
+            "invoice no", "invoice number", "invoice #",
+            "subtotal", "total", "vat", "tax", "discount",
+        )
+        for region in regions:
+            if region.get("label") != "paragraph":
+                continue
+            rn = _normalize(region.get("text", ""))
+            if any(a in rn for a in _skip):
+                continue
+            name = _extract_name(region.get("lines", []))
+            if name:
+                _set_field(payload, "Issuer_Name", name, "top_paragraph_fallback", region.get("text", ""))
+                break
 
     return payload
 
@@ -574,7 +615,7 @@ def extract_invoice_fields(storage_key: str, content_type: str) -> ExtractionOut
         invoice_number=fval("Invoice_Number"),
         invoice_date=_parse_date(fval("Invoice_Date")),
         due_date=_parse_date(fval("Due_Date")),
-        issuer_name="",      # not modelled in this dataset
+        issuer_name=fval("Issuer_Name"),
         recipient_name=fval("Client_Name"),
         total_amount=_parse_amount(total_text),
         currency=_infer_currency(total_text),
@@ -583,6 +624,7 @@ def extract_invoice_fields(storage_key: str, content_type: str) -> ExtractionOut
             "invoice_number": 0.8 if fval("Invoice_Number") else 0.0,
             "invoice_date": 0.8 if fval("Invoice_Date") else 0.0,
             "due_date": 0.8 if fval("Due_Date") else 0.0,
+            "issuer_name": 0.8 if fval("Issuer_Name") else 0.0,
             "recipient_name": 0.8 if fval("Client_Name") else 0.0,
             "total_amount": 0.8 if total_text else 0.0,
         },
