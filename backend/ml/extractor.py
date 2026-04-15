@@ -16,6 +16,7 @@ import os
 import re
 import unicodedata
 import logging
+from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from typing import TypedDict
@@ -170,9 +171,68 @@ def _padded_box(
 
 # ── OCR helpers ───────────────────────────────────────────────────────────────
 
-def _ocr_crop_tesseract(crop: Image.Image, lang: str = "eng+fra"):
+def _ocr_crop_tesseract(crop: Image.Image, lang: str = "eng+fra") -> list[_OCRLine]:
     """Run Tesseract on a PIL image crop and return grouped OCR lines."""
-    return _shared_ocr_pil_tesseract(crop, lang)
+    return _group_lines(_shared_ocr_pil_tesseract(crop, lang))
+
+
+_MIN_TOKEN_CONFIDENCE = 0.3
+
+
+@dataclass
+class _OCRToken:
+    text: str
+    confidence: float
+    xmin: float
+    ymin: float
+    xmax: float
+    ymax: float
+
+    @property
+    def center_x(self) -> float:
+        return (self.xmin + self.xmax) / 2.0
+
+    @property
+    def center_y(self) -> float:
+        return (self.ymin + self.ymax) / 2.0
+
+    @property
+    def height(self) -> float:
+        return max(1.0, self.ymax - self.ymin)
+
+
+@dataclass
+class _OCRLine:
+    text: str
+    tokens: list[_OCRToken]
+
+
+def _shared_ocr_pil_tesseract(image: Image.Image, lang: str = "eng+fra") -> list[_OCRToken]:
+    """Run Tesseract on a PIL image and return filtered OCR tokens."""
+    data = pytesseract.image_to_data(image, lang=lang, output_type=pytesseract.Output.DICT)
+    tokens: list[_OCRToken] = []
+    for index, text in enumerate(data["text"]):
+        text = str(text).strip()
+        if not text:
+            continue
+        confidence = float(data["conf"][index])
+        if confidence < 0:
+            continue
+        xmin = float(data["left"][index])
+        ymin = float(data["top"][index])
+        width = float(data["width"][index])
+        height = float(data["height"][index])
+        tokens.append(_OCRToken(
+            text=text,
+            confidence=confidence / 100.0,
+            xmin=xmin,
+            ymin=ymin,
+            xmax=xmin + width,
+            ymax=ymin + height,
+        ))
+    tokens = [t for t in tokens if t.confidence > _MIN_TOKEN_CONFIDENCE]
+    tokens.sort(key=lambda t: (t.center_y, t.xmin))
+    return tokens
 
 
 _COLUMN_GAP_FACTOR = 4.0  # horizontal gap > this × median height = different column
