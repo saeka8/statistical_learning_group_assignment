@@ -7,7 +7,6 @@ import styles from './WorkspaceSummary.module.css';
 interface WorkspaceSummaryProps {
   summary: WorkspaceSummary | null;
   isLoading: boolean;
-  displayName?: string;
 }
 
 function formatLabel(value: string): string {
@@ -22,7 +21,7 @@ function formatCount(value: number): string {
   return new Intl.NumberFormat('en-US').format(value);
 }
 
-export function WorkspaceSummary({ summary, isLoading, displayName }: WorkspaceSummaryProps) {
+export function WorkspaceSummary({ summary, isLoading }: WorkspaceSummaryProps) {
   const statCards = summary
     ? [
         { label: 'Total uploads', value: formatCount(summary.totals.uploads) },
@@ -39,20 +38,12 @@ export function WorkspaceSummary({ summary, isLoading, displayName }: WorkspaceS
 
   return (
     <SectionReveal>
-      <section className={styles.summary} aria-labelledby="workspace-summary-title">
-        <div className={styles.header}>
-          <div>
-            <p className={styles.eyebrow}>Workspace overview</p>
-            <h2 id="workspace-summary-title" className={styles.title}>
-              {displayName
-                ? `${displayName}'s document pulse`
-                : 'A quick pulse on the document library'}
-            </h2>
-          </div>
-          {summary ? (
+      <section className={styles.summary}>
+        {summary ? (
+          <div className={styles.header}>
             <Badge label={`${summary.recentActivity.length} recent items`} variant="info" />
-          ) : null}
-        </div>
+          </div>
+        ) : null}
 
         <div className={styles.grid}>
           <div className={styles.stats}>

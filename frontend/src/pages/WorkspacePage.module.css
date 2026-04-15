@@ -44,6 +44,22 @@
   max-width: 56rem;
 }
 
+.backLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  text-decoration: none;
+  transition: color 0.15s ease;
+  width: fit-content;
+}
+
+.backLink:hover {
+  color: var(--color-text-primary);
+}
+
 .title {
   font-size: clamp(2.3rem, 5vw, 4.4rem);
   letter-spacing: -0.06em;

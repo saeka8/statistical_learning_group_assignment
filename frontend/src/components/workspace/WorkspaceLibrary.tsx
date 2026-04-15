@@ -58,19 +58,13 @@ export function WorkspaceLibrary({
 
   return (
     <SectionReveal direction="left">
-      <section className={styles.library} aria-labelledby="workspace-library-title">
+      <section className={styles.library}>
         <div className={styles.header}>
-          <div>
-            <p className={styles.eyebrow}>Library</p>
-            <h2 id="workspace-library-title" className={styles.title}>
-              Browse documents
-            </h2>
-          </div>
           <Badge label={`${documents.length} visible`} variant="accent" />
         </div>
 
         <Card variant="glass" padding="md" className={styles.filters}>
-          <label className={styles.field}>
+          <label className={`${styles.field} ${styles.fieldSearch}`}>
             <span className={styles.fieldLabel}>Search documents</span>
             <input
               type="search"

@@ -30,6 +30,10 @@
   gap: var(--space-3);
 }
 
+.fieldSearch {
+  margin-right: var(--space-4);
+}
+
 .field {
   display: grid;
   gap: 0.45rem;

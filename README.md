@@ -109,17 +109,6 @@ Both tasks run asynchronously in the background worker. The frontend polls until
 
 ## Getting Started
 
-### Prerequisites
-
-- [Docker Engine](https://docs.docker.com/engine/install/) (or Docker Desktop)
-- `docker compose` plugin (`docker compose version` should work)
-- `make` — `sudo apt install make` on Linux/WSL
-- Node.js 20+ (for the frontend)
-
-> Tesseract OCR is installed **inside the Docker image** — you do not need it on your host machine.
-
-### First-time setup
-
 **1. Clone and enter the directory**
 ```bash
 git clone <repo-url>
@@ -132,36 +121,30 @@ cp .env.example .env
 ```
 Set a real value for `SECRET_KEY`. Everything else works as-is for local development.
 
-**3. Start all services**
-```bash
-make up
-```
-Builds the Docker images (includes Tesseract + all ML dependencies) and starts PostgreSQL, MinIO, the Django API, and the background worker.
+---
 
-**4. Run database migrations** *(first run only)*
+### Option A — Docker + Make (recommended)
+
+**Prerequisites:** [Docker Engine](https://docs.docker.com/engine/install/) (or Docker Desktop), `make`
+
+> Tesseract OCR, PostgreSQL, and MinIO are all provisioned inside Docker — nothing extra to install on the host.
+
+**Start all backend services**
 ```bash
-make migrate
+make up        # build images and start PostgreSQL, MinIO, API, worker
+make migrate   # first run only
 ```
 
-**5. Start the frontend**
+**Start the frontend**
 ```bash
 cd frontend
-npm install   # first run only
+npm install    # first run only
 npm run dev
 ```
 
-Open **http://localhost:5173** — sign up, upload a document, and click **Analyze**.
+Open **http://localhost:5173**.
 
-| Service | URL |
-|---|---|
-| Frontend | http://localhost:5173 |
-| API | http://localhost:8000/api/ |
-| Django admin | http://localhost:8000/admin/ |
-| MinIO console | http://localhost:9001 |
-
----
-
-### Everyday commands
+**Everyday commands**
 
 | Command | What it does |
 |---|---|
@@ -172,19 +155,67 @@ Open **http://localhost:5173** — sign up, upload a document, and click **Analy
 | `make shell` | Open a Django shell inside the container |
 | `make lint` | Run the linter (ruff) |
 
-Watch the worker execute classification tasks in real time:
-```bash
-docker compose logs worker -f
-```
-
-### Without `make`
-
+Without `make`, the equivalents are:
 ```bash
 docker compose up --build -d
 docker compose exec api python manage.py migrate
 docker compose logs -f api worker
 docker compose down
 ```
+
+---
+
+### Option B — Without Docker (local dev)
+
+**Prerequisites:** Python 3.12+, Node.js 20+, PostgreSQL 16, a running MinIO instance (or any S3-compatible store), and Tesseract OCR with English + French language packs.
+
+Install Tesseract:
+```bash
+# Ubuntu/Debian/WSL
+sudo apt install tesseract-ocr tesseract-ocr-eng tesseract-ocr-fra
+
+# macOS
+brew install tesseract
+```
+
+**Backend**
+```bash
+cd backend
+python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+```
+
+Copy `.env.example` to `.env` and fill in your local PostgreSQL and MinIO connection details, then:
+```bash
+python manage.py migrate
+python manage.py runserver          # API on :8000
+```
+
+In a second terminal, start the background task worker:
+```bash
+source .venv/bin/activate
+python manage.py qcluster           # Django Q2 worker
+```
+
+**Frontend**
+```bash
+cd frontend
+npm install
+npm run dev                         # dev server on :5173
+```
+
+Open **http://localhost:5173**.
+
+---
+
+### Service URLs
+
+| Service | URL |
+|---|---|
+| Frontend | http://localhost:5173 |
+| API | http://localhost:8000/api/ |
+| Django admin | http://localhost:8000/admin/ |
+| MinIO console | http://localhost:9001 |
 
 ---
 
@@ -229,8 +260,8 @@ All endpoints are prefixed `/api/`. Authenticated routes require `Authorization:
 │   │   └── users/          # Registration, JWT auth, profiles
 │   ├── ml/
 │   │   ├── classifier.py   # OCR → TF-IDF + image features → Random Forest
-│   │   ├── extractor.py    # YOLOv8 inference → Tesseract OCR → field mapping
-│   │   └── models/         # classifier.pkl, tfidf_vectorizer.pkl, yolo_invoice.pt
+│   │   ├── extractor.py    # paragraph/table YOLO → region OCR → field extraction
+│   │   └── models/         # classifier.pkl, tfidf_vectorizer.pkl, yolo_paragraph.pt
 │   ├── config/             # Django settings (base / development / production)
 │   └── Dockerfile          # Includes Tesseract, libmagic, ML dependencies
 ├── frontend/

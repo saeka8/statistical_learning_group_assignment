@@ -1,11 +1,10 @@
-import { Badge } from '../components/common/Badge';
+import { Link } from 'react-router-dom';
 import { Container } from '../components/layout/Container';
 import { Navbar } from '../components/layout/Navbar';
 import { SectionReveal } from '../components/common/SectionReveal';
 import { WorkspaceDetailsPanel } from '../components/workspace/WorkspaceDetailsPanel';
 import { WorkspaceLibrary } from '../components/workspace/WorkspaceLibrary';
 import { WorkspaceSummary } from '../components/workspace/WorkspaceSummary';
-import { useAuth } from '../hooks/useAuth';
 import { useWorkspace } from '../hooks/useWorkspace';
 import {
   deleteDocument,
@@ -17,7 +16,6 @@ import { useEffect, useState } from 'react';
 import styles from './WorkspacePage.module.css';
 
 export function WorkspacePage() {
-  const { user } = useAuth();
   const workspace = useWorkspace();
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<'download' | 'rerun' | 'delete' | null>(null);
@@ -87,15 +85,15 @@ export function WorkspacePage() {
         <Container size="wide">
           <SectionReveal>
             <section className={styles.hero} aria-labelledby="workspace-page-title">
-              <Badge label="Private workspace" variant="accent" />
+              <Link to="/" className={styles.backLink} aria-label="Back to main menu">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                  <path d="M10 3L5 8l5 5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                Main menu
+              </Link>
               <h1 id="workspace-page-title" className={styles.title}>
                 Workspace
               </h1>
-              <p className={styles.subtitle}>
-                {user?.displayName ? `${user.displayName}, ` : ''}
-                track uploads, filter the library, and open the latest classification or invoice
-                details without leaving the dashboard.
-              </p>
             </section>
           </SectionReveal>
         </Container>
@@ -110,7 +108,6 @@ export function WorkspacePage() {
           <WorkspaceSummary
             summary={workspace.summary}
             isLoading={workspace.isSummaryLoading}
-            displayName={user?.displayName}
           />
 
           {actionError ? (
