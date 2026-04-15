@@ -9,6 +9,7 @@ Examples:
   python3 Feature_Extraction_Invoice/extract_invoice_ocr.py --image path/to/invoice.jpg
   python3 Feature_Extraction_Invoice/extract_invoice_ocr.py --image path/to/invoice.jpg --engine easyocr --pretty
   python3 Feature_Extraction_Invoice/extract_invoice_ocr.py --image path/to/invoice.jpg --dump-ocr ocr.json
+  python3 Feature_Extraction_Invoice/extract_invoice_ocr.py --image path/to/invoice.jpg --preprocess --pretty
 """
 
 from __future__ import annotations
@@ -35,6 +36,20 @@ INVOICE_ID_RE = re.compile(r"\b[A-Z0-9][A-Z0-9./_-]{3,}\b", re.IGNORECASE)
 SUMMARY_NOISE = ("observations", "abonnement", "augmentera", "topnet")
 PAYMENT_NOISE = ("virement", "banque", "reglement", "paiement", "piece", "cheque", "attijari")
 PRODUCT_NOISE = ("total", "tva", "remise", "montant", "base", "taux", "reglement")
+
+# Minimum OCR confidence to keep a token. Tokens at or below this threshold
+# are typically noise or unrecognized glyphs that pollute downstream extraction.
+_MIN_TOKEN_CONFIDENCE = 0.3
+
+# A horizontal gap larger than this multiple of the median token height is
+# treated as a column boundary, preventing tokens from separate columns
+# being merged into the same logical line.
+_COLUMN_GAP_FACTOR = 4.0
+
+# Maximum number of lines to scan below a "Products" header when collecting
+# product rows. 30 is generous enough for invoices with many line items while
+# still bounding the search.
+_MAX_PRODUCT_LINES = 30
 
 FIELD_LABELS = {
     "numero_facture": "Invoice_Number",
@@ -181,12 +196,22 @@ def build_parser() -> argparse.ArgumentParser:
         help="Comma-separated EasyOCR languages, default 'en,fr'.",
     )
     parser.add_argument(
+        "--paddleocr-lang",
+        default="fr",
+        help="PaddleOCR language string, default 'fr'.",
+    )
+    parser.add_argument(
         "--tesseract-lang",
         default="eng+fra",
         help="pytesseract language string, default 'eng+fra'.",
     )
     parser.add_argument("--dump-ocr", type=Path, help="Optional path to dump raw OCR tokens as JSON.")
     parser.add_argument("--pretty", action="store_true", help="Pretty-print JSON output.")
+    parser.add_argument(
+        "--preprocess",
+        action="store_true",
+        help="Apply OpenCV pre-processing (deskew, denoise, binarize) before OCR.",
+    )
     return parser
 
 
@@ -315,26 +340,87 @@ def phone_from_text(text: str) -> str | None:
     return candidates[0] if candidates else None
 
 
+def preprocess_image(image_path: Path) -> Path:
+    """Deskew, denoise, and binarize an invoice image using OpenCV.
+
+    Returns the path to a temporary pre-processed image that OCR engines
+    can consume. The temporary file is cleaned up by the caller (load_ocr_tokens)
+    in its finally block.
+    """
+    import cv2  # type: ignore
+    import numpy as np  # type: ignore
+    import tempfile
+
+    # Block size and constant for adaptive thresholding.
+    # 31 is large enough to cover typical text stroke widths on invoice scans;
+    # C=10 compensates for uneven illumination typical in scanned documents.
+    _ADAPTIVE_BLOCK_SIZE = 31
+    _ADAPTIVE_C = 10
+
+    img = cv2.imread(str(image_path))
+    if img is None:
+        raise ValueError(f"OpenCV could not load image: {image_path}")
+
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+    # Light denoising
+    denoised = cv2.fastNlMeansDenoising(gray, h=10)
+
+    # Deskew using the dominant angle of text lines
+    coords = np.column_stack(np.where(denoised < 128))
+    if coords.shape[0] > 50:
+        angle = cv2.minAreaRect(coords)[-1]
+        if angle < -45:
+            angle = 90 + angle
+        if abs(angle) > 0.3:
+            (h, w) = denoised.shape
+            center = (w // 2, h // 2)
+            matrix = cv2.getRotationMatrix2D(center, angle, 1.0)
+            denoised = cv2.warpAffine(denoised, matrix, (w, h), flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_REPLICATE)
+
+    # Adaptive binarization
+    binarized = cv2.adaptiveThreshold(
+        denoised, 255,
+        cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY,
+        _ADAPTIVE_BLOCK_SIZE, _ADAPTIVE_C,
+    )
+
+    suffix = Path(image_path).suffix or ".png"
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
+    cv2.imwrite(tmp.name, binarized)
+    return Path(tmp.name)
+
+
 def load_ocr_tokens(args: argparse.Namespace) -> tuple[str, list[OCRToken]]:
-    if args.engine == "auto":
-        for engine in ("paddleocr", "easyocr", "tesseract"):
-            try:
-                return engine, run_ocr(engine, args)
-            except ModuleNotFoundError:
-                continue
-        raise SystemExit(
-            "No OCR engine available. Install one of: paddleocr, easyocr, or pytesseract+tesseract."
-        )
-    return args.engine, run_ocr(args.engine, args)
+    image_path = args.image
+    tmp_path: Path | None = None
+    if getattr(args, "preprocess", False):
+        tmp_path = preprocess_image(image_path)
+        image_path = tmp_path
+
+    try:
+        if args.engine == "auto":
+            for engine in ("paddleocr", "easyocr", "tesseract"):
+                try:
+                    return engine, run_ocr(engine, args, image_path)
+                except ModuleNotFoundError:
+                    continue
+            raise SystemExit(
+                "No OCR engine available. Install one of: paddleocr, easyocr, or pytesseract+tesseract."
+            )
+        return args.engine, run_ocr(args.engine, args, image_path)
+    finally:
+        if tmp_path is not None and tmp_path.exists():
+            tmp_path.unlink(missing_ok=True)
 
 
-def run_ocr(engine: str, args: argparse.Namespace) -> list[OCRToken]:
+def run_ocr(engine: str, args: argparse.Namespace, image_path: Path) -> list[OCRToken]:
     if engine == "easyocr":
-        return run_easyocr(args.image, args.easyocr_langs)
+        return run_easyocr(image_path, args.easyocr_langs)
     if engine == "paddleocr":
-        return run_paddleocr(args.image)
+        return run_paddleocr(image_path, args.paddleocr_lang)
     if engine == "tesseract":
-        return run_tesseract(args.image, args.tesseract_lang)
+        return run_tesseract(image_path, args.tesseract_lang)
     raise ValueError(f"Unsupported engine: {engine}")
 
 
@@ -360,10 +446,10 @@ def run_easyocr(image_path: Path, langs: str) -> list[OCRToken]:
     return filter_tokens(tokens)
 
 
-def run_paddleocr(image_path: Path) -> list[OCRToken]:
+def run_paddleocr(image_path: Path, lang: str = "fr") -> list[OCRToken]:
     from paddleocr import PaddleOCR  # type: ignore
 
-    reader = PaddleOCR(use_angle_cls=True, lang="fr")
+    reader = PaddleOCR(use_angle_cls=True, lang=lang)
     results = reader.ocr(str(image_path), cls=True)
     tokens: list[OCRToken] = []
     for page in results:
@@ -419,7 +505,7 @@ def run_tesseract(image_path: Path, lang: str) -> list[OCRToken]:
 
 
 def filter_tokens(tokens: Iterable[OCRToken]) -> list[OCRToken]:
-    filtered = [token for token in tokens if token.text and token.confidence >= 0.0]
+    filtered = [token for token in tokens if token.text and token.confidence > _MIN_TOKEN_CONFIDENCE]
     filtered.sort(key=lambda token: (token.center_y, token.xmin))
     return filtered
 
@@ -428,16 +514,28 @@ def group_lines(tokens: list[OCRToken]) -> list[OCRLine]:
     if not tokens:
         return []
 
+    # Compute median token height to use as a stable tolerance baseline.
+    heights = sorted(token.height for token in tokens)
+    median_height = heights[len(heights) // 2]
+    y_tolerance = max(6.0, median_height * 0.5)
+
     lines: list[list[OCRToken]] = []
     for token in tokens:
         placed = False
         for line_tokens in lines:
-            avg_center = sum(item.center_y for item in line_tokens) / len(line_tokens)
-            avg_height = sum(item.height for item in line_tokens) / len(line_tokens)
-            if abs(token.center_y - avg_center) <= max(10.0, avg_height * 0.6):
-                line_tokens.append(token)
-                placed = True
-                break
+            avg_center_y = sum(item.center_y for item in line_tokens) / len(line_tokens)
+            if abs(token.center_y - avg_center_y) > y_tolerance:
+                continue
+            # Prevent tokens from different columns merging into the same line:
+            # only group if there is horizontal overlap or adjacency.
+            line_xmin = min(item.xmin for item in line_tokens)
+            line_xmax = max(item.xmax for item in line_tokens)
+            gap_threshold = median_height * _COLUMN_GAP_FACTOR
+            if token.xmin > line_xmax + gap_threshold or token.xmax < line_xmin - gap_threshold:
+                continue
+            line_tokens.append(token)
+            placed = True
+            break
         if not placed:
             lines.append([token])
 
@@ -529,12 +627,15 @@ def strip_anchor_prefix(text: str, normalized_anchors: list[str]) -> str:
 def nearest_token_right_of_anchor(line: OCRLine, field_name: str) -> ExtractedField | None:
     if len(line.tokens) < 2:
         return None
+    field_anchors = [normalize_text(a) for a in FIELD_RULES[field_name]["anchors"]]
     normalized_tokens = [normalize_text(token.text) for token in line.tokens]
     anchor_end_index = 0
+    # Find the rightmost token whose text is part of any anchor phrase so that
+    # we start looking for the value only after the full anchor label.
     for idx, token_text in enumerate(normalized_tokens):
-        if token_text in {"invoice", "date", "total", "email", "tel", "phone", "vat", "tax", "client", "facture"}:
+        if token_text and any(token_text in anchor for anchor in field_anchors):
             anchor_end_index = idx
-    for token in line.tokens[anchor_end_index + 1 :]:
+    for token in line.tokens[anchor_end_index + 1:]:
         candidate = pick_field_value(field_name, token.text)
         if candidate:
             return ExtractedField(
@@ -553,18 +654,22 @@ def nearby_lines(lines: list[OCRLine], anchor_index: int) -> list[OCRLine]:
         if anchor_index + offset >= len(lines):
             break
         line = lines[anchor_index + offset]
-        if abs(line.center_y - anchor_line.center_y) <= anchor_line.height * (1.5 + offset):
+        if abs(line.center_y - anchor_line.center_y) > anchor_line.height * (1.5 + offset):
             continue
         candidates.append(line)
     return candidates
 
 
 def pick_product_candidate(lines: list[OCRLine], anchor_index: int) -> ExtractedField | None:
-    for offset in range(1, 9):
+    product_rows: list[str] = []
+    for offset in range(1, _MAX_PRODUCT_LINES + 1):
         if anchor_index + offset >= len(lines):
             break
         neighbor = lines[anchor_index + offset]
         normalized = normalize_text(neighbor.text)
+        # Stop collecting when we hit a summary/total line.
+        if any(keyword in normalized for keyword in ("total", "sous-total", "subtotal", "montant total")):
+            break
         if looks_like_table_header(normalized):
             continue
         if any(keyword in normalized for keyword in PRODUCT_NOISE):
@@ -573,13 +678,18 @@ def pick_product_candidate(lines: list[OCRLine], anchor_index: int) -> Extracted
             continue
         value = strip_product_noise(neighbor.text)
         if value:
-            return ExtractedField(
-                value=value,
-                method="anchor_product_row",
-                confidence=max((token.confidence for token in neighbor.tokens), default=0.0),
-                evidence=neighbor.text,
-            )
-    return None
+            product_rows.append(value)
+    if not product_rows:
+        return None
+    # Return all rows joined by a separator; confidence from the first row's tokens.
+    first_neighbor_idx = anchor_index + 1
+    first_tokens = lines[first_neighbor_idx].tokens if first_neighbor_idx < len(lines) else []
+    return ExtractedField(
+        value=" | ".join(product_rows),
+        method="anchor_product_rows",
+        confidence=max((token.confidence for token in first_tokens), default=0.0),
+        evidence=product_rows[0],
+    )
 
 
 def strip_product_noise(text: str) -> str | None:
