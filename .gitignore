@@ -63,3 +63,5 @@ ai/classification/data/
 ai/classification/trained_models/features_cache.pkl
 ai/classification/trained_models/all_classifiers.pkl
 ai/classification/trained_models/features_cache.pkl
+ai/extraction/paragraph_yolo/region_ocr
+ai/extraction/paragraph_yolo/predictions

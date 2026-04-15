@@ -7,11 +7,11 @@ from pathlib import Path
 
 from PIL import Image
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+REPO_ROOT = Path(__file__).resolve().parents[3]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from Feature_Extraction_Invoice.OCR_method.extract_invoice_ocr import (
+from ai.extraction.OCR_method.extract_invoice_ocr import (
     OCRLine,
     filter_tokens,
     group_lines,
@@ -19,15 +19,21 @@ from Feature_Extraction_Invoice.OCR_method.extract_invoice_ocr import (
     run_paddleocr,
     run_tesseract,
 )
-from Feature_Extraction_Invoice.paragraph_yolo.extract_fields_from_regions import (
+from ai.extraction.paragraph_yolo.extract_fields_from_regions import (
     extract_fields_from_region_payload,
+)
+from ai.extraction.paragraph_yolo.shared_pipeline import (
+    CLASS_NAMES,
+    filter_detections,
+    padded_box,
 )
 
 
 ROOT = Path(__file__).resolve().parent
 DEFAULT_MODEL = ROOT / "best.pt"
 OUTPUT_DIR = ROOT / "region_ocr"
-CLASS_NAMES = {0: "paragraph", 1: "table"}
+DEFAULT_PAD_RATIO = 0.02
+DEFAULT_PAD_MIN = 12
 
 
 def parse_args() -> argparse.Namespace:
@@ -61,86 +67,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--pretty", action="store_true")
     return parser.parse_args()
 
-
-def box_iou(box_a: list[float], box_b: list[float]) -> float:
-    ax1, ay1, ax2, ay2 = box_a
-    bx1, by1, bx2, by2 = box_b
-    inter_x1 = max(ax1, bx1)
-    inter_y1 = max(ay1, by1)
-    inter_x2 = min(ax2, bx2)
-    inter_y2 = min(ay2, by2)
-    inter_w = max(0.0, inter_x2 - inter_x1)
-    inter_h = max(0.0, inter_y2 - inter_y1)
-    inter_area = inter_w * inter_h
-    if inter_area <= 0:
-        return 0.0
-
-    area_a = max(0.0, ax2 - ax1) * max(0.0, ay2 - ay1)
-    area_b = max(0.0, bx2 - bx1) * max(0.0, by2 - by1)
-    union = area_a + area_b - inter_area
-    if union <= 0:
-        return 0.0
-    return inter_area / union
-
-
-def containment_ratio(box_a: list[float], box_b: list[float]) -> float:
-    ax1, ay1, ax2, ay2 = box_a
-    bx1, by1, bx2, by2 = box_b
-    inter_x1 = max(ax1, bx1)
-    inter_y1 = max(ay1, by1)
-    inter_x2 = min(ax2, bx2)
-    inter_y2 = min(ay2, by2)
-    inter_w = max(0.0, inter_x2 - inter_x1)
-    inter_h = max(0.0, inter_y2 - inter_y1)
-    inter_area = inter_w * inter_h
-    if inter_area <= 0:
-        return 0.0
-    area_a = max(0.0, ax2 - ax1) * max(0.0, ay2 - ay1)
-    area_b = max(0.0, bx2 - bx1) * max(0.0, by2 - by1)
-    smaller = min(area_a, area_b)
-    if smaller <= 0:
-        return 0.0
-    return inter_area / smaller
-
-
-def filter_detections(
-    detections: list[dict],
-    dedup_iou: float,
-    containment_threshold: float,
-    max_paragraphs: int,
-    max_tables: int,
-) -> list[dict]:
-    kept: list[dict] = []
-    counts = {"paragraph": 0, "table": 0}
-
-    for detection in sorted(detections, key=lambda item: item["confidence"], reverse=True):
-        label = detection["label"]
-        limit = max_tables if label == "table" else max_paragraphs
-        if counts[label] >= limit:
-            continue
-
-        duplicate = False
-        for existing in kept:
-            if existing["label"] != label:
-                continue
-            if box_iou(existing["xyxy"], detection["xyxy"]) >= dedup_iou:
-                duplicate = True
-                break
-            if containment_ratio(existing["xyxy"], detection["xyxy"]) >= containment_threshold:
-                duplicate = True
-                break
-        if duplicate:
-            continue
-
-        kept.append(detection)
-        counts[label] += 1
-
-    kept.sort(key=lambda item: (item["xyxy"][1], item["xyxy"][0]))
-    for index, detection in enumerate(kept, start=1):
-        detection["region_index"] = index
-    return kept
-
-
 def run_region_ocr(
     engine: str,
     image_path: Path,
@@ -148,13 +74,16 @@ def run_region_ocr(
     tesseract_lang: str,
 ) -> tuple[str, list[OCRLine]]:
     if engine == "auto":
+        failures: list[str] = []
         for backend in ("paddleocr", "easyocr", "tesseract"):
             try:
                 return backend, ocr_lines_for_engine(backend, image_path, easyocr_langs, tesseract_lang)
-            except ModuleNotFoundError:
+            except Exception as exc:
+                failures.append(f"{backend}: {exc.__class__.__name__}: {exc}")
                 continue
         raise SystemExit(
-            "No OCR engine available. Install one of: paddleocr, easyocr, or pytesseract+tesseract."
+            "No OCR engine available. Tried paddleocr, easyocr, and tesseract.\n"
+            + "\n".join(failures)
         )
 
     return engine, ocr_lines_for_engine(engine, image_path, easyocr_langs, tesseract_lang)
@@ -175,6 +104,19 @@ def ocr_lines_for_engine(
     else:
         raise ValueError(f"Unsupported OCR engine: {engine}")
     return group_lines(filter_tokens(tokens))
+
+
+def padded_box(x1: int, y1: int, x2: int, y2: int, image_width: int, image_height: int) -> tuple[int, int, int, int]:
+    width = max(1, x2 - x1)
+    height = max(1, y2 - y1)
+    pad_x = max(DEFAULT_PAD_MIN, int(round(width * DEFAULT_PAD_RATIO)))
+    pad_y = max(DEFAULT_PAD_MIN, int(round(height * DEFAULT_PAD_RATIO)))
+    return (
+        max(0, x1 - pad_x),
+        max(0, y1 - pad_y),
+        min(image_width, x2 + pad_x),
+        min(image_height, y2 + pad_y),
+    )
 
 
 def main() -> int:
@@ -229,14 +171,17 @@ def main() -> int:
         containment_threshold=args.containment_threshold,
         max_paragraphs=args.max_paragraphs,
         max_tables=args.max_tables,
+        add_region_index=True,
     )
 
     image = Image.open(image_path)
+    image_width, image_height = image.size
     regions = []
     chosen_engine: str | None = None
 
     for detection in detections:
         x1, y1, x2, y2 = [int(round(value)) for value in detection["xyxy"]]
+        x1, y1, x2, y2 = padded_box(x1, y1, x2, y2, image_width, image_height)
         crop_path = crops_dir / f"{detection['region_index']:02d}_{detection['label']}.png"
         image.crop((x1, y1, x2, y2)).save(crop_path)
 

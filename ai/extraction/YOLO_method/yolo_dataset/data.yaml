@@ -1,4 +1,4 @@
-path: /Users/onosaeka/Uni/BCSAI/3-2/Statistical Learning/statistical_learning_group_assignment/Feature_Extraction_Invoice/YOLO_method/yolo_dataset
+path: /Users/onosaeka/Uni/BCSAI/3-2/Statistical Learning/statistical_learning_group_assignment/ai/extraction/YOLO_method/yolo_dataset
 train: images/train
 val: images/val
 

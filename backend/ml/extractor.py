@@ -14,6 +14,7 @@ Pipeline:
 import io
 import os
 import re
+import sys
 import unicodedata
 import logging
 from dataclasses import dataclass
@@ -28,9 +29,19 @@ logger = logging.getLogger(__name__)
 
 ML_DIR = os.path.dirname(os.path.abspath(__file__))
 MODELS_DIR = os.path.join(ML_DIR, "models")
+REPO_ROOT = os.path.dirname(os.path.dirname(ML_DIR))
 
-# YOLO class names for the paragraph/table model
-CLASS_NAMES = {0: "paragraph", 1: "table"}
+if REPO_ROOT not in sys.path:
+    sys.path.insert(0, REPO_ROOT)
+
+from ai.extraction.paragraph_yolo.shared_pipeline import (
+    CLASS_NAMES,
+    filter_detections as _shared_filter_detections,
+    padded_box as _shared_padded_box,
+)
+from ai.extraction.OCR_method.shared_ocr import (
+    ocr_pil_tesseract as _shared_ocr_pil_tesseract,
+)
 
 # Lazy-loaded YOLO model singleton
 _yolo_model = None
@@ -121,31 +132,13 @@ def _filter_detections(
     max_tables: int = 3,
 ) -> list:
     """Deduplicate same-label boxes and cap counts per label."""
-    kept = []
-    counts = {"paragraph": 0, "table": 0}
-
-    for det in sorted(detections, key=lambda d: d["confidence"], reverse=True):
-        label = det["label"]
-        limit = max_tables if label == "table" else max_paragraphs
-        if counts[label] >= limit:
-            continue
-
-        duplicate = False
-        for existing in kept:
-            if existing["label"] != label:
-                continue
-            if _box_iou(existing["xyxy"], det["xyxy"]) >= dedup_iou:
-                duplicate = True
-                break
-            if _containment_ratio(existing["xyxy"], det["xyxy"]) >= containment_threshold:
-                duplicate = True
-                break
-        if not duplicate:
-            kept.append(det)
-            counts[label] += 1
-
-    kept.sort(key=lambda d: (d["xyxy"][1], d["xyxy"][0]))
-    return kept
+    return _shared_filter_detections(
+        detections,
+        dedup_iou=dedup_iou,
+        containment_threshold=containment_threshold,
+        max_paragraphs=max_paragraphs,
+        max_tables=max_tables,
+    )
 
 
 # ── OCR helpers ───────────────────────────────────────────────────────────────
@@ -176,28 +169,7 @@ class _OCRLine:
 
 def _ocr_crop_tesseract(crop: Image.Image, lang: str = "eng+fra") -> list[_OCRLine]:
     """Run Tesseract on a PIL image crop and return grouped OCR lines."""
-    data = pytesseract.image_to_data(crop, lang=lang, output_type=pytesseract.Output.DICT)
-    tokens = []
-    for i, text in enumerate(data["text"]):
-        text = str(text).strip()
-        if not text:
-            continue
-        conf = float(data["conf"][i]) / 100.0
-        if conf <= 0.3:
-            continue
-        xmin = float(data["left"][i])
-        ymin = float(data["top"][i])
-        w = float(data["width"][i])
-        h = float(data["height"][i])
-        tokens.append(_OCRToken(
-            text=text,
-            confidence=conf,
-            xmin=xmin, ymin=ymin,
-            xmax=xmin + w, ymax=ymin + h,
-        ))
-
-    tokens.sort(key=lambda t: (t.center_y, t.xmin))
-    return _group_lines(tokens)
+    return _shared_ocr_pil_tesseract(crop, lang)
 
 
 _COLUMN_GAP_FACTOR = 4.0  # horizontal gap > this × median height = different column
@@ -379,7 +351,7 @@ def _extract_products(lines: list) -> str | None:
     return " | ".join(products) if products else None
 
 
-def _extract_fields_from_regions(regions: list) -> dict:
+def _extract_fields_from_regions_legacy(regions: list) -> dict:
     """
     Anchor-based field extraction from paragraph/table OCR regions.
     Mirrors the logic of paragraph_yolo/extract_fields_from_regions.py.
@@ -487,6 +459,28 @@ def _extract_fields_from_regions(regions: list) -> dict:
     return payload
 
 
+def _extract_fields_from_regions(regions: list) -> dict:
+    """
+    Use the shared ai/extraction region-field mapper so backend behavior
+    tracks improvements made in the training/prototyping pipeline.
+
+    Fall back to the legacy local implementation only if the shared module
+    cannot be imported or raises unexpectedly.
+    """
+    try:
+        from ai.extraction.paragraph_yolo.extract_fields_from_regions import (
+            extract_fields_from_region_payload,
+        )
+
+        return extract_fields_from_region_payload({"regions": regions})
+    except Exception as exc:
+        logger.warning(
+            "Falling back to legacy backend field extractor because shared ai/extraction import failed: %s",
+            exc,
+        )
+        return _extract_fields_from_regions_legacy(regions)
+
+
 # ── Post-processing ───────────────────────────────────────────────────────────
 
 _DATE_FORMATS = [
@@ -581,12 +575,7 @@ def extract_invoice_fields(storage_key: str, content_type: str) -> ExtractionOut
     regions = []
     for det in detections:
         x1, y1, x2, y2 = [int(round(v)) for v in det["xyxy"]]
-        # Add small padding for OCR quality
-        pad = 4
-        x1 = max(0, x1 - pad)
-        y1 = max(0, y1 - pad)
-        x2 = min(img.width, x2 + pad)
-        y2 = min(img.height, y2 + pad)
+        x1, y1, x2, y2 = _shared_padded_box(x1, y1, x2, y2, img.width, img.height)
 
         crop = img.crop((x1, y1, x2, y2))
         ocr_lines = _ocr_crop_tesseract(crop)

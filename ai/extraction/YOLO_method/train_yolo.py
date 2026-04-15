@@ -2,10 +2,10 @@
 """Prepare the invoice dataset for YOLO and optionally launch training.
 
 Examples:
-  python3 Feature_Extraction_Invoice/YOLO_method/train_yolo.py --prepare-only
-  python3 Feature_Extraction_Invoice/YOLO_method/train_yolo.py --epochs 100 --model yolov8n.pt
-  python3 Feature_Extraction_Invoice/YOLO_method/train_yolo.py --resume
-  python3 Feature_Extraction_Invoice/YOLO_method/train_yolo.py --checkpoint Feature_Extraction_Invoice/YOLO_method/runs/invoice_fields/weights/last.pt --imgsz 640 --epochs 20 --name invoice_fields_640
+  python3 ai/extraction/YOLO_method/train_yolo.py --prepare-only
+  python3 ai/extraction/YOLO_method/train_yolo.py --epochs 100 --model yolov8n.pt
+  python3 ai/extraction/YOLO_method/train_yolo.py --resume
+  python3 ai/extraction/YOLO_method/train_yolo.py --checkpoint ai/extraction/YOLO_method/runs/invoice_fields/weights/last.pt --imgsz 640 --epochs 20 --name invoice_fields_640
 """
 
 from __future__ import annotations

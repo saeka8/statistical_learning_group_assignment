@@ -6,6 +6,7 @@ The objective is to extract structured fields from invoice images, such as:
 
 - `Invoice_Number`
 - `Invoice_Date`
+- `Issuer_Name`
 - `Client_Name`
 - `Client_Email`
 - `Client_Phone`
@@ -104,17 +105,23 @@ Reason:
 
 Instead of detecting every final field directly, we can first detect larger logical regions such as `paragraph` and `table`. This can make OCR more reliable because it limits reading to semantically related content blocks. It is especially useful when several related values appear together in the same area, for example line items inside a table or contact details grouped in one paragraph.
 
+Current post-OCR extraction in this track is rule-based, not model-based:
+
+- anchor words such as `invoice number`, `bill to`, `subtotal`, `vat`
+- regexes for dates, amounts, percentages, emails, and phones
+- simple region-type assumptions, for example preferring totals from `table` regions and contact blocks from `paragraph` regions
+
 ## Current Dataset
 https://universe.roboflow.com/roboflow-5gpbq/invoice-data-mbpu8
 
 
 Current annotation file:
 
-- `Feature_Extraction_Invoice/train/_annotations.csv`
+- `ai/extraction/train/_annotations.csv`
 
 Current image folder:
 
-- `Feature_Extraction_Invoice/train/`
+- `ai/extraction/train/`
 
 Annotation format:
 
@@ -133,25 +140,25 @@ Each row defines:
 
 We added a visualization script:
 
-- `Feature_Extraction_Invoice/Dataset_verification/visualize_labels.py`
+- `ai/extraction/Dataset_verification/visualize_labels.py`
 
 This can be used to inspect how fields are labeled on the invoices before training.
 
 Example:
 
 ```bash
-python3 Feature_Extraction_Invoice/Dataset_verification/visualize_labels.py --sample 5
-python3 Feature_Extraction_Invoice/Dataset_verification/visualize_labels.py --image 671_png_jpg.rf.p73UNqF5SQDjw12vTAI6.jpg --open
+python3 ai/extraction/Dataset_verification/visualize_labels.py --sample 5
+python3 ai/extraction/Dataset_verification/visualize_labels.py --image 671_png_jpg.rf.p73UNqF5SQDjw12vTAI6.jpg --open
 ```
 
 ## Method Files
 
 The project is currently organized into method-specific folders:
 
-- `Feature_Extraction_Invoice/YOLO_method/`
-- `Feature_Extraction_Invoice/paragraph_yolo/`
-- `Feature_Extraction_Invoice/OCR_method/`
-- `Feature_Extraction_Invoice/Dataset_verification/`
+- `ai/extraction/YOLO_method/`
+- `ai/extraction/paragraph_yolo/`
+- `ai/extraction/OCR_method/`
+- `ai/extraction/Dataset_verification/`
 
 Main entry points:
 
@@ -192,7 +199,7 @@ Expected output of stage 1:
 
 Current alternative detector:
 
-- `Feature_Extraction_Invoice/paragraph_yolo/`
+- `ai/extraction/paragraph_yolo/`
 
 This dataset uses two classes:
 
@@ -208,7 +215,7 @@ Its training script:
 Main command:
 
 ```bash
-python3 Feature_Extraction_Invoice/paragraph_yolo/train_paragraph_yolo.py --epochs 20 --imgsz 960 --batch 4 --device mps --name paragraph_table
+python3 ai/extraction/paragraph_yolo/train_paragraph_yolo.py --epochs 20 --imgsz 960 --batch 4 --device mps --name paragraph_table
 ```
 
 ### Stage 2. OCR on Detected Regions
@@ -281,7 +288,7 @@ If needed later, a language model can still be added as a refinement stage, but 
 
 We also implemented a rule-based OCR-first fallback:
 
-- `Feature_Extraction_Invoice/OCR_method/extract_invoice_ocr.py`
+- `ai/extraction/OCR_method/extract_invoice_ocr.py`
 
 This fallback:
 
@@ -300,7 +307,7 @@ This path is especially useful when:
 
 We added a second YOLO-based detection strategy under:
 
-- `Feature_Extraction_Invoice/paragraph_yolo/`
+- `ai/extraction/paragraph_yolo/`
 
 The idea is:
 
@@ -352,7 +359,7 @@ For the paragraph/table track, evaluation should also check:
 
 ## Practical Project Plan
 
-1. Verify annotations visually with `Feature_Extraction_Invoice/Dataset_verification/visualize_labels.py`
+1. Verify annotations visually with `ai/extraction/Dataset_verification/visualize_labels.py`
 2. Train either the field-level detector or the paragraph/table detector
 3. Run inference on unseen invoices
 4. Crop detected fields or regions and apply OCR
