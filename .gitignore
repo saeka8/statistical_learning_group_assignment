@@ -58,3 +58,8 @@ Feature_Extraction_Invoice/paragraph_yolo/prepared
 Feature_Extraction_Invoice/paragraph_yolo/runs/paragraph_table
 Feature_Extraction_Invoice/paragraph_yolo/train
 Feature_Extraction_Invoice/paragraph_yolo/region_ocr/invoice_grouped_ocr
+# Classification data and cache
+ai/classification/data/
+ai/classification/trained_models/features_cache.pkl
+ai/classification/trained_models/all_classifiers.pkl
+ai/classification/trained_models/features_cache.pkl
