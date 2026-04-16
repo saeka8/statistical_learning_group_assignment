@@ -41,8 +41,8 @@ warnings.filterwarnings("ignore")
 
 # ── paths ────────────────────────────────────────────────────
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-DATA_DIR = os.path.join(SCRIPT_DIR, "data")
-OUTPUT_DIR = os.path.join(SCRIPT_DIR, "trained_models")
+DATA_DIR = os.path.join(os.path.dirname(SCRIPT_DIR), "data")
+OUTPUT_DIR = os.path.join(os.path.dirname(SCRIPT_DIR), "saved_models")
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 CATEGORIES = ["email", "invoice", "resume", "scientific_publication"]
@@ -315,7 +315,7 @@ def main():
         },
     }
 
-    best_path = os.path.join(OUTPUT_DIR, "best_classifier.pkl")
+    best_path = os.path.join(OUTPUT_DIR, "baseline_svm_rbf.pkl")
     with open(best_path, "wb") as f:
         pickle.dump(model_data, f)
     print(f"Saved to {best_path}")
@@ -327,7 +327,7 @@ def main():
     print(f"TF-IDF saved to {tfidf_path}")
 
     # Save all models for comparison
-    all_path = os.path.join(OUTPUT_DIR, "all_classifiers.pkl")
+    all_path = os.path.join(OUTPUT_DIR, "all_baseline_models.pkl")
     all_data = {}
     for name, r in results.items():
         all_data[name] = {

@@ -18,8 +18,8 @@ from sklearn.metrics import accuracy_score, f1_score, classification_report
 warnings.filterwarnings("ignore")
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-CACHE_PATH = os.path.join(SCRIPT_DIR, "trained_models", "features_cache.pkl")
-OUTPUT_DIR = os.path.join(SCRIPT_DIR, "trained_models")
+CACHE_PATH = os.path.join(os.path.dirname(SCRIPT_DIR), "saved_models", "features_cache.pkl")
+OUTPUT_DIR = os.path.join(os.path.dirname(SCRIPT_DIR), "saved_models")
 
 print("Loading cached features...")
 with open(CACHE_PATH, "rb") as f:
@@ -121,7 +121,7 @@ model_data = {
         "f1": f1_final,
     },
 }
-save_path = os.path.join(OUTPUT_DIR, "best_classifier_tuned.pkl")
+save_path = os.path.join(OUTPUT_DIR, "tuned_svm.pkl")
 with open(save_path, "wb") as f:
     pickle.dump(model_data, f)
 print(f"Saved tuned model to {save_path}")

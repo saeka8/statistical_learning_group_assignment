@@ -5,7 +5,7 @@ from huggingface_hub import HfApi, hf_hub_download
 REPO = "vaclavpechtor/rvl_cdip-small-200"
 CATEGORIES = ["email", "invoice", "resume", "scientific_publication"]
 SPLITS = ["train", "validation"]
-OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "data")
+OUTPUT_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data")
 
 api = HfApi()
 all_files = api.list_repo_files(REPO, repo_type="dataset")

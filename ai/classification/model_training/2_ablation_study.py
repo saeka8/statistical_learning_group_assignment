@@ -20,7 +20,7 @@ from sklearn.metrics import accuracy_score, f1_score
 warnings.filterwarnings("ignore")
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-CACHE_PATH = os.path.join(SCRIPT_DIR, "trained_models", "features_cache.pkl")
+CACHE_PATH = os.path.join(os.path.dirname(SCRIPT_DIR), "saved_models", "features_cache.pkl")
 
 print("Loading cached features...")
 with open(CACHE_PATH, "rb") as f:

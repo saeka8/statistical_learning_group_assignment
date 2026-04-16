@@ -29,8 +29,8 @@ from sklearn.metrics import (
 warnings.filterwarnings("ignore")
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-CACHE_PATH = os.path.join(SCRIPT_DIR, "trained_models", "features_cache.pkl")
-OUTPUT_DIR = os.path.join(SCRIPT_DIR, "trained_models")
+CACHE_PATH = os.path.join(os.path.dirname(SCRIPT_DIR), "saved_models", "features_cache.pkl")
+OUTPUT_DIR = os.path.join(os.path.dirname(SCRIPT_DIR), "saved_models")
 
 
 # ── text cleaning ────────────────────────────────────────────
@@ -260,7 +260,7 @@ def main():
         "model_name": best_config.replace(" ", "_"),
         "metrics": {"accuracy": best_acc},
     }
-    save_path = os.path.join(OUTPUT_DIR, "improved_classifier.pkl")
+    save_path = os.path.join(OUTPUT_DIR, "improved_ensemble.pkl")
     with open(save_path, "wb") as f:
         pickle.dump(model_data, f)
     print(f"\nSaved to {save_path}")
