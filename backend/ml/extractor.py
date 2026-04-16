@@ -275,7 +275,7 @@ def _group_lines(tokens: list[_OCRToken]) -> list[_OCRLine]:
 
 
 # ── Field extraction ──────────────────────────────────────────────────────────
-# Extraction is delegated to ai.extraction.paragraph_yolo.extract_fields_from_regions
+# Extraction is delegated to ai.extraction.ocr_after_yolo_segmentation.extract_fields_from_regions
 
 
 # ── Post-processing ───────────────────────────────────────────────────────────
@@ -388,7 +388,7 @@ def extract_invoice_fields(storage_key: str, content_type: str) -> ExtractionOut
             "line_count": len(region_lines),
         })
 
-    from ai.extraction.paragraph_yolo.extract_fields_from_regions import extract_fields_from_region_payload
+    from ai.extraction.ocr_after_yolo_segmentation.extract_fields_from_regions import extract_fields_from_region_payload
     extracted = extract_fields_from_region_payload({"regions": regions})
 
     def fval(field: str) -> str:
