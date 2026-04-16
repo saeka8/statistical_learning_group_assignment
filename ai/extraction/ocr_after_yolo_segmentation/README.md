@@ -1,126 +1,90 @@
-# Paragraph/Table YOLO Pipeline
+# OCR After YOLO Segmentation
 
-This folder contains the paragraph/table detection pipeline for invoice images.
+This folder contains the region-based invoice extraction pipeline.
 
-Goal:
+Pipeline:
 
-- detect larger logical regions such as `paragraph` and `table`
-- run OCR inside those detected regions
-- extract structured invoice fields from grouped region text
+```text
+invoice image
+-> YOLO paragraph/table detection
+-> crop each kept region
+-> OCR per region
+-> heuristic field extraction
+-> structured JSON
+```
 
-This is an alternative to field-level YOLO detection.
+This is different from:
 
-## Files
+- `ai/extraction/precise_yolo/`
+  - field-level YOLO detector
+- `ai/extraction/purely_ocr/`
+  - full-page OCR fallback without region detection
+
+## Main Files
 
 - `train_paragraph_yolo.py`
-  - prepares a grouped train/validation split
-  - trains YOLO on the `paragraph` / `table` dataset
+  - prepares a grouped train/validation split for paragraph/table detection
+  - trains the paragraph/table YOLO model
 - `predict_paragraph_yolo.py`
-  - runs paragraph/table detection only
+  - detection only
 - `ocr_by_regions.py`
-  - runs detection, OCR on each kept region, and final field extraction
+  - end-to-end region detection + OCR + field extraction
 - `extract_fields_from_regions.py`
-  - field-mapping logic used by `ocr_by_regions.py`
-- `data.yaml`
-  - generated training config pointing at `prepared/`
+  - extraction-only step from an existing `region_ocr.json`
+- `shared_pipeline.py`
+  - detection deduplication and crop padding helpers
+- `best.pt`
+  - current paragraph/table checkpoint used by default
 
-## Dataset Layout
+## Current Folder Layout
 
-Source dataset expected by this pipeline:
+Current extraction folders:
 
-- `train/images/`
-- `train/labels/`
+- `ai/extraction/dataset/`
+  - dataset used by the precise field-level YOLO pipeline
+- `ai/extraction/precise_yolo/`
+  - precise field detector
+- `ai/extraction/ocr_after_yolo_segmentation/`
+  - paragraph/table segmentation + OCR
+- `ai/extraction/purely_ocr/`
+  - OCR-first fallback
 
-The script creates a prepared split here:
+## Install
 
-- `prepared/images/train`
-- `prepared/images/val`
-- `prepared/labels/train`
-- `prepared/labels/val`
-
-Important:
-
-- the split is grouped by original invoice document
-- augmented versions of the same invoice stay in the same split
-- this avoids train/validation leakage
-
-## Install Dependencies
-
-For YOLO:
+YOLO:
 
 ```bash
 python3 -m pip install ultralytics
 ```
 
-For OCR:
+OCR dependencies:
 
 ```bash
-python3 -m pip install -r ai/extraction/OCR_method/requirements_ocr.txt
+python3 -m pip install -r ai/extraction/purely_ocr/requirements_ocr.txt
 ```
 
-If you use Tesseract, the system binary must also be installed.
+If you use Tesseract, install the system `tesseract` binary as well.
 
-## 1. Prepare Dataset
+## OCR Engines
 
-```bash
-python3 ai/extraction/paragraph_yolo/train_paragraph_yolo.py --prepare-only --force
-```
+`ocr_by_regions.py` supports:
 
-This builds:
+- `auto`
+  - tries `paddleocr`, then `easyocr`, then `tesseract`
+- `paddleocr`
+- `easyocr`
+- `tesseract`
 
-- `ai/extraction/paragraph_yolo/prepared/`
-- `ai/extraction/paragraph_yolo/data.yaml`
+If you do not want EasyOCR fallback, pass `--engine paddleocr` or `--engine tesseract` explicitly.
 
-## 2. Train YOLO
+The engine actually used is saved as `ocr_engine` in `extracted_fields.json`.
 
-Recommended starting command:
+## 1. Detection + OCR + Extraction
 
-```bash
-python3 ai/extraction/paragraph_yolo/train_paragraph_yolo.py \
-  --epochs 20 \
-  --imgsz 960 \
-  --batch 4 \
-  --device mps \
-  --name paragraph_table
-```
-
-Training outputs go to:
-
-- `ai/extraction/paragraph_yolo/runs/paragraph_table/`
-
-Important files:
-
-- `runs/paragraph_table/weights/best.pt`
-- `runs/paragraph_table/weights/last.pt`
-- `runs/paragraph_table/results.csv`
-
-Use `best.pt` for inference.
-
-## 3. Test Detection Only
-
-To visualize paragraph/table boxes on a new invoice image:
+Main end-to-end command:
 
 ```bash
-python3 ai/extraction/paragraph_yolo/predict_paragraph_yolo.py \
-  --image "/full/path/to/invoice.png" \
-  --name paragraph_test
-  
-```
-
-Outputs:
-
-- `ai/extraction/paragraph_yolo/predictions/paragraph_test/`
-
-Important file:
-
-- `detections.json`
-
-## 4. Run Detection + OCR + Field Extraction
-
-This is the main end-to-end command for backend integration:
-
-```bash
-python3 ai/extraction/paragraph_yolo/ocr_by_regions.py \
+python3 ai/extraction/ocr_after_yolo_segmentation/ocr_by_regions.py \
   --image "/full/path/to/invoice.png" \
   --name invoice_grouped_ocr \
   --conf 0.5 \
@@ -128,21 +92,97 @@ python3 ai/extraction/paragraph_yolo/ocr_by_regions.py \
   --pretty
 ```
 
-What it does:
+Force PaddleOCR:
 
-1. runs the paragraph/table detector
-2. removes duplicate same-label boxes more aggressively
-3. crops each kept region
-4. runs OCR inside each crop
-5. extracts invoice fields from grouped region text
+```bash
+python3 ai/extraction/ocr_after_yolo_segmentation/ocr_by_regions.py \
+  --image "ai/extraction/image.png" \
+  --name invoice_grouped_ocr \
+  --conf 0.5 \
+  --iou 0.35 \
+  --engine paddleocr \
+  --pretty
+```
+
+Force Tesseract:
+
+```bash
+python3 ai/extraction/ocr_after_yolo_segmentation/ocr_by_regions.py \
+  --image "ai/extraction/image.png" \
+  --name invoice_grouped_ocr \
+  --conf 0.5 \
+  --iou 0.35 \
+  --engine tesseract \
+  --tesseract-lang eng+fra \
+  --pretty
+```
 
 Outputs:
 
-- `ai/extraction/paragraph_yolo/region_ocr/invoice_grouped_ocr/region_ocr.json`
-- `ai/extraction/paragraph_yolo/region_ocr/invoice_grouped_ocr/extracted_fields.json`
-- `ai/extraction/paragraph_yolo/region_ocr/invoice_grouped_ocr/crops/`
+- `ai/extraction/ocr_after_yolo_segmentation/region_ocr/<name>/region_ocr.json`
+- `ai/extraction/ocr_after_yolo_segmentation/region_ocr/<name>/extracted_fields.json`
+- `ai/extraction/ocr_after_yolo_segmentation/region_ocr/<name>/crops/`
 
-## Output Format
+## 2. Extraction Only
+
+If you already have `region_ocr.json` and only changed extraction rules:
+
+```bash
+python3 ai/extraction/ocr_after_yolo_segmentation/extract_fields_from_regions.py \
+  --region-json ai/extraction/ocr_after_yolo_segmentation/region_ocr/invoice_grouped_ocr/region_ocr.json \
+  --pretty
+```
+
+Use this when:
+
+- you changed regexes, anchors, or heuristics
+- you do not want to rerun YOLO and OCR
+
+## 3. Detection Only
+
+To test only paragraph/table detection:
+
+```bash
+python3 ai/extraction/ocr_after_yolo_segmentation/predict_paragraph_yolo.py \
+  --image "/full/path/to/invoice.png" \
+  --name paragraph_test
+```
+
+Outputs:
+
+- `ai/extraction/ocr_after_yolo_segmentation/predictions/paragraph_test/`
+- `detections.json`
+
+## 4. Paragraph/Table Training
+
+Training command:
+
+```bash
+python3 ai/extraction/ocr_after_yolo_segmentation/train_paragraph_yolo.py \
+  --epochs 20 \
+  --imgsz 960 \
+  --batch 4 \
+  --device mps \
+  --name paragraph_table
+```
+
+Important:
+
+- this script expects source data inside this folder:
+  - `ai/extraction/ocr_after_yolo_segmentation/train/images/`
+  - `ai/extraction/ocr_after_yolo_segmentation/train/labels/`
+- it then creates:
+  - `ai/extraction/ocr_after_yolo_segmentation/prepared/images/train`
+  - `ai/extraction/ocr_after_yolo_segmentation/prepared/images/val`
+  - `ai/extraction/ocr_after_yolo_segmentation/prepared/labels/train`
+  - `ai/extraction/ocr_after_yolo_segmentation/prepared/labels/val`
+- if those source `train/` folders are not present, preparation/training will fail
+
+Training outputs go to:
+
+- `ai/extraction/ocr_after_yolo_segmentation/runs/<name>/`
+
+## Output Schema
 
 `extracted_fields.json` contains:
 
@@ -150,7 +190,7 @@ Outputs:
 {
   "image": "/abs/path/to/invoice.png",
   "model": "/abs/path/to/best.pt",
-  "ocr_engine": "easyocr",
+  "ocr_engine": "paddleocr",
   "extracted_fields": {
     "Invoice_Number": {
       "value": "82896",
@@ -180,44 +220,10 @@ Supported field keys:
 - `Discount_Rate`
 - `Due_Date`
 
-## Suggested Backend Integration
-
-For backend use, the simplest path is:
-
-1. save the uploaded invoice image temporarily
-2. call `ocr_by_regions.py`
-3. read `extracted_fields.json`
-4. return `extracted_fields` to the API layer
-
-The backend only needs to consume:
-
-- `extracted_fields.json`
-
-The extra files are useful for debugging:
-
-- `region_ocr.json`
-- cropped region images
-- rendered YOLO prediction image
-
-## Recommended Defaults
-
-These work well for first integration tests:
-
-- `--conf 0.5`
-- `--iou 0.35`
-- default model:
-  - `runs/paragraph_table/weights/best.pt`
-
-If duplicate boxes remain high, tune:
-
-- `--conf`
-- `--iou`
-- internal deduplication settings in `ocr_by_regions.py`
-
 ## Notes
 
-- `best.pt` is the checkpoint to use for inference, not `last.pt`
-- grouped OCR is useful because it avoids reading the whole page strictly left-to-right
-- post-OCR field extraction is heuristic: anchor words + regexes + region-type rules, not a transformer model
-- money fields such as `Subtotal`, `VAT`, `Discount`, and `Total` now prefer `table` regions and only fall back to paragraph regions when needed
-- final quality still depends on whether the detector keeps the right regions, especially the totals block
+- `ocr_by_regions.py` already uses the current `extract_fields_from_regions.py`
+- grouped OCR is useful because it preserves region structure better than full-page left-to-right OCR
+- post-OCR extraction is rule-based: anchors + regex + region heuristics, not BERT
+- `Subtotal`, `VAT`, `Discount`, and `Total` prefer `table` regions and fall back to paragraph regions if needed
+- final quality still depends on whether the detector captures the correct regions, especially totals/contact blocks

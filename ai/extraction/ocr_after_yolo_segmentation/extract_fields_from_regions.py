@@ -152,18 +152,23 @@ def percent_in_text(text: str) -> str | None:
     return match.group(0).strip() if match else None
 
 
+def clean_invoice_number(value: str) -> str:
+    value = re.sub(r"\s*([/._-])\s*", r" \1 ", value.strip())
+    return re.sub(r"\s+", " ", value).strip(" -:#")
+
+
 def invoice_number_from_text(text: str) -> str | None:
     normalized = normalize_text(text)
     if "nif" in normalized:
         return None
     patterns = [
-        r"(?:invoice\s*(?:no|number|#)?|facture\s*(?:n|no|numero)?|factura\s*(?:n|no|numero|n°)?)\s*[:#-]?\s*([A-Z0-9./_-]{3,})",
-        r"\bno\.?\s*([A-Z0-9./_-]{3,})",
+        r"(?:invoice\s*(?:no|number|#)?|facture\s*(?:n|no|numero)?|factura\s*(?:n|no|numero|n°)?)\s*[:#-]?\s*([a-z0-9]+(?:\s*[/._-]\s*[a-z0-9]+)+|[a-z0-9./_-]{3,})",
+        r"\bno\.?\s*([a-z0-9]+(?:\s*[/._-]\s*[a-z0-9]+)+|[a-z0-9./_-]{3,})",
     ]
     for pattern in patterns:
         match = re.search(pattern, normalized, re.IGNORECASE)
         if match:
-            value = match.group(1).strip()
+            value = clean_invoice_number(match.group(1))
             if sum(ch.isdigit() for ch in value) >= 3 and not looks_like_phone_token(value):
                 return value
 
@@ -175,20 +180,25 @@ def invoice_number_from_text(text: str) -> str | None:
 
 def extract_address_lines(lines: list[str]) -> str | None:
     kept: list[str] = []
+    skip_next_nif_value = False
     for line in lines:
         normalized = normalize_text(line)
         if not line.strip():
             continue
+        if skip_next_nif_value and re.fullmatch(r"[\d\s./-]+", line.strip()):
+            skip_next_nif_value = False
+            continue
+        skip_next_nif_value = False
         if any(anchor in normalized for anchor in ("billed to", "bill to", "shipping", "ship to", "delivered to", "payable to", "contact info", "payment terms")):
             continue
         if normalized.startswith("nif"):
+            skip_next_nif_value = True
             continue
         if cleaned_email(line) or cleaned_phone(line):
             continue
         if "www." in normalized or "http" in normalized:
             continue
-        normalized = re.sub(r"^(direccion|dirección|ciudad)\s*:\s*", "", normalized).strip()
-        line = re.sub(r"^(Dirección|Direccion|Ciudad)\s*:\s*", "", line).strip()
+        line = re.sub(r"^(?:Dire\S*|Ciudad)\s*:\s*", "", line, flags=re.IGNORECASE).strip()
         kept.append(line.strip())
     if not kept:
         return None
@@ -216,6 +226,27 @@ def extract_name(lines: list[str]) -> str | None:
     return None
 
 
+def extract_stacked_heading(lines: list[str]) -> str | None:
+    candidates: list[str] = []
+    for line in lines:
+        cleaned = line.strip(" |")
+        normalized = normalize_text(cleaned)
+        if not cleaned:
+            continue
+        if any(char.isdigit() for char in cleaned):
+            break
+        if len(re.findall(r"[A-Za-zÁÉÍÓÚÑáéíóúñ]", cleaned)) < 4:
+            continue
+        if any(anchor in normalized for anchor in ("factura", "invoice", "fecha", "date", "nif", "direccion", "direcc", "ciudad", "gracias", "transferencia")):
+            break
+        candidates.append(cleaned)
+        if len(candidates) == 2:
+            break
+    if len(candidates) >= 2:
+        return " ".join(candidates)
+    return None
+
+
 def strip_trailing_price(text: str) -> str:
     stripped = re.sub(r"\s+(?:[$€£]?\d[\d,]*(?:\.\d{2})?)\s*$", "", text).strip()
     return stripped or text.strip()
@@ -227,7 +258,7 @@ def extract_products(lines: list[str]) -> str | None:
         normalized = normalize_text(line)
         if not line.strip():
             continue
-        if any(anchor in normalized for anchor in ("description", "designation", "item", "items", "products")):
+        if any(anchor in normalized for anchor in ("description", "designation", "item", "items", "products", "descrip", "cantidad", "precio", "unit price", "quantity")):
             continue
         if any(anchor in normalized for anchor in ("subtotal", "discount", "tax", "vat", "total")):
             continue
@@ -239,20 +270,61 @@ def extract_products(lines: list[str]) -> str | None:
     return " | ".join(products) if products else None
 
 
+def monetary_amounts_in_text(text: str) -> list[str]:
+    amounts: list[str] = []
+    for amount in amounts_in_text(text):
+        span = re.search(re.escape(amount), text)
+        if span and span.end() < len(text) and text[span.end():].lstrip().startswith("%"):
+            continue
+        if "%" in amount:
+            continue
+        digits = re.sub(r"\D", "", amount)
+        if not digits:
+            continue
+        if len(digits) <= 2 and "%" in text:
+            continue
+        amounts.append(amount)
+    return amounts
+
+
+def standalone_amount(lines: list[str], index: int, direction: int) -> str | None:
+    cursor = index + direction
+    while 0 <= cursor < len(lines):
+        candidate = lines[cursor].strip()
+        if not candidate:
+            cursor += direction
+            continue
+        normalized = normalize_text(candidate)
+        if any(anchor in normalized for anchor in ("subtotal", "base", "vat", "tax", "iva", "discount", "total")):
+            return None
+        amounts = monetary_amounts_in_text(candidate)
+        if amounts:
+            return amounts[-1]
+        cursor += direction
+    return None
+
+
 def extract_totals(payload: dict[str, dict], lines: list[str], evidence: str, method: str) -> None:
-    for line in lines:
+    for index, line in enumerate(lines):
         line_normalized = normalize_text(line)
-        amounts = amounts_in_text(line)
+        amounts = monetary_amounts_in_text(line)
         if ("subtotal" in line_normalized or line_normalized.startswith("base")) and amounts:
             set_field(payload, "Subtotal", amounts[-1], method, evidence)
-        if ("vat" in line_normalized or "tax" in line_normalized or "iva" in line_normalized) and amounts:
-            set_field(payload, "VAT", amounts[-1], method, evidence)
+        if "subtotal" in line_normalized or line_normalized.startswith("base"):
+            subtotal = amounts[-1] if amounts else standalone_amount(lines, index, +1)
+            set_field(payload, "Subtotal", subtotal, method, evidence)
+        if "vat" in line_normalized or "tax" in line_normalized or "iva" in line_normalized:
+            vat_amount = amounts[-1] if amounts else standalone_amount(lines, index, +1)
+            set_field(payload, "VAT", vat_amount, method, evidence)
             set_field(payload, "VAT_Rate", percent_in_text(line), method, evidence)
         if "discount" in line_normalized and amounts:
             set_field(payload, "Discount", amounts[-1], method, evidence)
             set_field(payload, "Discount_Rate", percent_in_text(line), method, evidence)
-        if re.search(r"\btotal\b", line_normalized) and amounts:
-            set_field(payload, "Total", amounts[-1], method, evidence)
+        if "discount" in line_normalized and not amounts:
+            set_field(payload, "Discount", standalone_amount(lines, index, +1), method, evidence)
+        if re.search(r"\btotal\b", line_normalized):
+            total_amount = amounts[-1] if amounts else standalone_amount(lines, index, -1) or standalone_amount(lines, index, +1)
+            set_field(payload, "Total", total_amount, method, evidence)
 
 
 def metadata_date_from_lines(lines: list[str], anchor: str) -> str | None:
@@ -316,8 +388,12 @@ def best_contact_block(regions: list[dict]) -> dict | None:
             for line in lines
             if any(token in normalize_text(line) for token in (" rd", " road", " st", " street", " ave", " avenue", " tampa", " fl"))
         )
+        anchor_score = 2 if any(anchor in normalize_text(region.get("text", "") or "") for anchor in CLIENT_ANCHORS) else 0
+        has_contact_signal = (email_count + phone_count + website_count + address_count) > 0 or anchor_score > 0
+        if not has_contact_signal:
+            continue
 
-        score = email_count + phone_count + website_count + address_count
+        score = email_count + phone_count + website_count + address_count + anchor_score
         if len(re.findall(r"[A-Za-z]", first_line)) >= 8:
             score += 2
         if len(lines) >= 3:
@@ -386,7 +462,7 @@ def extract_fields_from_region_payload(data: dict) -> dict[str, dict]:
                 set_field(payload, "Client_Email", cleaned_email(line), "metadata_region", text)
                 set_field(payload, "Client_Phone", cleaned_phone(line), "metadata_region", text)
 
-        if label != "table" and any(anchor in normalized for anchor in ("subtotal", "tax", "vat", "discount", "total")):
+        if label != "table" and any(anchor in normalized for anchor in ("subtotal", "base", "tax", "vat", "iva", "discount", "total")):
             extract_totals(payload, lines, text, "paragraph_totals_fallback")
 
     contact_block = best_contact_block(regions)
@@ -459,7 +535,8 @@ def extract_fields_from_region_payload(data: dict) -> dict[str, dict]:
                 continue
             if region_normalized.startswith("factura") or region_normalized.startswith("fecha"):
                 continue
-            name = extract_name([line.strip() for line in region.get("lines", []) if line.strip()])
+            region_lines = [line.strip() for line in region.get("lines", []) if line.strip()]
+            name = extract_stacked_heading(region_lines) or extract_name(region_lines)
             if name is None or len(name.split()) < 2:
                 continue
             if name:

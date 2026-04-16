@@ -24,7 +24,7 @@ It is weaker than detection plus OCR when layout changes a lot, but it is a prac
 
 Use:
 
-- `ai/extraction/OCR_method/extract_invoice_ocr.py`
+- `ai/extraction/purely_ocr/extract_invoice_ocr.py`
 
 It does:
 
@@ -81,7 +81,7 @@ If `--engine auto` fails, the script now reports which engine failed and why.
 Project-level OCR extras:
 
 ```bash
-python3 -m pip install -r ai/extraction/OCR_method/requirements_ocr.txt
+python3 -m pip install -r ai/extraction/purely_ocr/requirements_ocr.txt
 ```
 
 If you want to use Tesseract:
@@ -93,19 +93,19 @@ If you want to use Tesseract:
 Run on one invoice image:
 
 ```bash
-python3 ai/extraction/OCR_method/extract_invoice_ocr.py --image ai/extraction/image.png --pretty
+python3 ai/extraction/purely_ocr/extract_invoice_ocr.py --image ai/extraction/image.png --pretty
 ```
 
 Use a specific engine:
 
 ```bash
-python3 ai/extraction/OCR_method/extract_invoice_ocr.py --image ai/extraction/image.png --engine easyocr --pretty
+python3 ai/extraction/purely_ocr/extract_invoice_ocr.py --image ai/extraction/image.png --engine easyocr --pretty
 ```
 
 Dump raw OCR tokens for debugging:
 
 ```bash
-python3 ai/extraction/OCR_method/extract_invoice_ocr.py --image ai/extraction/image.png --dump-ocr ocr_tokens.json --pretty
+python3 ai/extraction/purely_ocr/extract_invoice_ocr.py --image ai/extraction/image.png --dump-ocr ocr_tokens.json --pretty
 ```
 
 ## Recommended Use
