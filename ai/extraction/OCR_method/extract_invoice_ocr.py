@@ -6,10 +6,10 @@ invoice image, groups OCR tokens into lines, then extracts structured fields
 using anchor-based rules and regex fallbacks.
 
 Examples:
-  python3 Feature_Extraction_Invoice/extract_invoice_ocr.py --image path/to/invoice.jpg
-  python3 Feature_Extraction_Invoice/extract_invoice_ocr.py --image path/to/invoice.jpg --engine easyocr --pretty
-  python3 Feature_Extraction_Invoice/extract_invoice_ocr.py --image path/to/invoice.jpg --dump-ocr ocr.json
-  python3 Feature_Extraction_Invoice/extract_invoice_ocr.py --image path/to/invoice.jpg --preprocess --pretty
+  python3 ai/extraction/OCR_method/extract_invoice_ocr.py --image path/to/invoice.jpg
+  python3 ai/extraction/OCR_method/extract_invoice_ocr.py --image path/to/invoice.jpg --engine easyocr --pretty
+  python3 ai/extraction/OCR_method/extract_invoice_ocr.py --image path/to/invoice.jpg --dump-ocr ocr.json
+  python3 ai/extraction/OCR_method/extract_invoice_ocr.py --image path/to/invoice.jpg --preprocess --pretty
 """
 
 from __future__ import annotations
@@ -20,7 +20,15 @@ import re
 import unicodedata
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Iterable
+
+from ai.extraction.OCR_method.shared_ocr import (
+    OCRLine,
+    OCRToken,
+    filter_tokens,
+    group_lines,
+    ocr_pil_tesseract,
+    ocr_pil_tesseract_tokens,
+)
 
 
 EMAIL_RE = re.compile(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", re.IGNORECASE)
@@ -36,15 +44,23 @@ INVOICE_ID_RE = re.compile(r"\b[A-Z0-9][A-Z0-9./_-]{3,}\b", re.IGNORECASE)
 SUMMARY_NOISE = ("observations", "abonnement", "augmentera", "topnet")
 PAYMENT_NOISE = ("virement", "banque", "reglement", "paiement", "piece", "cheque", "attijari")
 PRODUCT_NOISE = ("total", "tva", "remise", "montant", "base", "taux", "reglement")
-
-# Minimum OCR confidence to keep a token. Tokens at or below this threshold
-# are typically noise or unrecognized glyphs that pollute downstream extraction.
-_MIN_TOKEN_CONFIDENCE = 0.3
-
-# A horizontal gap larger than this multiple of the median token height is
-# treated as a column boundary, preventing tokens from separate columns
-# being merged into the same logical line.
-_COLUMN_GAP_FACTOR = 4.0
+ISSUER_SKIP_NOISE = (
+    "invoice",
+    "facture",
+    "bill to",
+    "billed to",
+    "ship to",
+    "shipping",
+    "customer",
+    "subtotal",
+    "total",
+    "tva",
+    "vat",
+    "discount",
+    "tax",
+    "amount due",
+    "balance due",
+)
 
 # Maximum number of lines to scan below a "Products" header when collecting
 # product rows. 30 is generous enough for invoices with many line items while
@@ -55,6 +71,7 @@ FIELD_LABELS = {
     "numero_facture": "Invoice_Number",
     "date_facturation": "Invoice_Date",
     "echeance": "Due_Date",
+    "nom_emetteur": "Issuer_Name",
     "nom_client": "Client_Name",
     "email_client": "Client_Email",
     "tel_client": "Client_Phone",
@@ -81,6 +98,10 @@ FIELD_RULES = {
     "echeance": {
         "anchors": ["due date", "echeance", "date d echeance", "date limite"],
         "pattern": DATE_RE,
+    },
+    "nom_emetteur": {
+        "anchors": ["from", "from:", "issued by", "emis par", "emetteur", "vendeur", "fournisseur", "supplier", "seller", "societe"],
+        "pattern": None,
     },
     "nom_client": {
         "anchors": ["bill to", "billed to", "client", "customer", "nom client", "sold to"],
@@ -131,46 +152,6 @@ FIELD_RULES = {
         "pattern": PERCENT_RE,
     },
 }
-
-
-@dataclass
-class OCRToken:
-    text: str
-    confidence: float
-    xmin: float
-    ymin: float
-    xmax: float
-    ymax: float
-
-    @property
-    def center_x(self) -> float:
-        return (self.xmin + self.xmax) / 2.0
-
-    @property
-    def center_y(self) -> float:
-        return (self.ymin + self.ymax) / 2.0
-
-    @property
-    def height(self) -> float:
-        return max(1.0, self.ymax - self.ymin)
-
-
-@dataclass
-class OCRLine:
-    text: str
-    xmin: float
-    ymin: float
-    xmax: float
-    ymax: float
-    tokens: list[OCRToken]
-
-    @property
-    def center_y(self) -> float:
-        return (self.ymin + self.ymax) / 2.0
-
-    @property
-    def height(self) -> float:
-        return max(1.0, self.ymax - self.ymin)
 
 
 @dataclass
@@ -400,13 +381,16 @@ def load_ocr_tokens(args: argparse.Namespace) -> tuple[str, list[OCRToken]]:
 
     try:
         if args.engine == "auto":
+            failures: list[str] = []
             for engine in ("paddleocr", "easyocr", "tesseract"):
                 try:
                     return engine, run_ocr(engine, args, image_path)
-                except ModuleNotFoundError:
+                except Exception as exc:
+                    failures.append(f"{engine}: {exc.__class__.__name__}: {exc}")
                     continue
             raise SystemExit(
-                "No OCR engine available. Install one of: paddleocr, easyocr, or pytesseract+tesseract."
+                "No OCR engine available. Tried paddleocr, easyocr, and tesseract.\n"
+                + "\n".join(failures)
             )
         return args.engine, run_ocr(args.engine, args, image_path)
     finally:
@@ -450,111 +434,82 @@ def run_paddleocr(image_path: Path, lang: str = "fr") -> list[OCRToken]:
     from paddleocr import PaddleOCR  # type: ignore
 
     reader = PaddleOCR(use_angle_cls=True, lang=lang)
-    results = reader.ocr(str(image_path), cls=True)
-    tokens: list[OCRToken] = []
-    for page in results:
-        for bbox, payload in page:
-            text, confidence = payload
-            xs = [point[0] for point in bbox]
-            ys = [point[1] for point in bbox]
-            tokens.append(
-                OCRToken(
-                    text=str(text).strip(),
-                    confidence=float(confidence),
-                    xmin=float(min(xs)),
-                    ymin=float(min(ys)),
-                    xmax=float(max(xs)),
-                    ymax=float(max(ys)),
+    try:
+        # PaddleOCR 2.x style API.
+        results = reader.ocr(str(image_path), cls=True)
+        tokens: list[OCRToken] = []
+        for page in results:
+            for bbox, payload in page:
+                text, confidence = payload
+                xs = [point[0] for point in bbox]
+                ys = [point[1] for point in bbox]
+                tokens.append(
+                    OCRToken(
+                        text=str(text).strip(),
+                        confidence=float(confidence),
+                        xmin=float(min(xs)),
+                        ymin=float(min(ys)),
+                        xmax=float(max(xs)),
+                        ymax=float(max(ys)),
+                    )
                 )
-            )
-    return filter_tokens(tokens)
+        return filter_tokens(tokens)
+    except TypeError:
+        # PaddleOCR 3.x pipeline API. `predict()` returns result objects whose
+        # JSON/dict payload includes recognized texts plus either polygons or boxes.
+        results = reader.predict(str(image_path))
+        tokens: list[OCRToken] = []
+        for page in results:
+            payload = getattr(page, "json", page)
+            if isinstance(payload, str):
+                payload = json.loads(payload)
+            if isinstance(payload, dict) and "res" in payload:
+                payload = payload["res"]
+            if not isinstance(payload, dict):
+                continue
+
+            texts = payload.get("rec_texts", []) or []
+            scores = payload.get("rec_scores", []) or []
+            boxes = payload.get("rec_boxes")
+            polys = payload.get("rec_polys") or payload.get("dt_polys")
+
+            if boxes is not None:
+                for text, confidence, box in zip(texts, scores, boxes):
+                    xmin, ymin, xmax, ymax = [float(value) for value in box]
+                    tokens.append(
+                        OCRToken(
+                            text=str(text).strip(),
+                            confidence=float(confidence),
+                            xmin=xmin,
+                            ymin=ymin,
+                            xmax=xmax,
+                            ymax=ymax,
+                        )
+                    )
+                continue
+
+            if polys is not None:
+                for text, confidence, bbox in zip(texts, scores, polys):
+                    xs = [float(point[0]) for point in bbox]
+                    ys = [float(point[1]) for point in bbox]
+                    tokens.append(
+                        OCRToken(
+                            text=str(text).strip(),
+                            confidence=float(confidence),
+                            xmin=min(xs),
+                            ymin=min(ys),
+                            xmax=max(xs),
+                            ymax=max(ys),
+                        )
+                    )
+
+        return filter_tokens(tokens)
 
 
 def run_tesseract(image_path: Path, lang: str) -> list[OCRToken]:
-    import pytesseract  # type: ignore
     from PIL import Image  # type: ignore
 
-    data = pytesseract.image_to_data(
-        Image.open(image_path),
-        lang=lang,
-        output_type=pytesseract.Output.DICT,
-    )
-    tokens: list[OCRToken] = []
-    for index, text in enumerate(data["text"]):
-        text = str(text).strip()
-        if not text:
-            continue
-        confidence = float(data["conf"][index])
-        if confidence < 0:
-            continue
-        xmin = float(data["left"][index])
-        ymin = float(data["top"][index])
-        width = float(data["width"][index])
-        height = float(data["height"][index])
-        tokens.append(
-            OCRToken(
-                text=text,
-                confidence=confidence / 100.0,
-                xmin=xmin,
-                ymin=ymin,
-                xmax=xmin + width,
-                ymax=ymin + height,
-            )
-        )
-    return filter_tokens(tokens)
-
-
-def filter_tokens(tokens: Iterable[OCRToken]) -> list[OCRToken]:
-    filtered = [token for token in tokens if token.text and token.confidence > _MIN_TOKEN_CONFIDENCE]
-    filtered.sort(key=lambda token: (token.center_y, token.xmin))
-    return filtered
-
-
-def group_lines(tokens: list[OCRToken]) -> list[OCRLine]:
-    if not tokens:
-        return []
-
-    # Compute median token height to use as a stable tolerance baseline.
-    heights = sorted(token.height for token in tokens)
-    median_height = heights[len(heights) // 2]
-    y_tolerance = max(6.0, median_height * 0.5)
-
-    lines: list[list[OCRToken]] = []
-    for token in tokens:
-        placed = False
-        for line_tokens in lines:
-            avg_center_y = sum(item.center_y for item in line_tokens) / len(line_tokens)
-            if abs(token.center_y - avg_center_y) > y_tolerance:
-                continue
-            # Prevent tokens from different columns merging into the same line:
-            # only group if there is horizontal overlap or adjacency.
-            line_xmin = min(item.xmin for item in line_tokens)
-            line_xmax = max(item.xmax for item in line_tokens)
-            gap_threshold = median_height * _COLUMN_GAP_FACTOR
-            if token.xmin > line_xmax + gap_threshold or token.xmax < line_xmin - gap_threshold:
-                continue
-            line_tokens.append(token)
-            placed = True
-            break
-        if not placed:
-            lines.append([token])
-
-    grouped: list[OCRLine] = []
-    for line_tokens in lines:
-        line_tokens.sort(key=lambda token: token.xmin)
-        text = " ".join(token.text for token in line_tokens).strip()
-        grouped.append(
-            OCRLine(
-                text=text,
-                xmin=min(token.xmin for token in line_tokens),
-                ymin=min(token.ymin for token in line_tokens),
-                xmax=max(token.xmax for token in line_tokens),
-                ymax=max(token.ymax for token in line_tokens),
-                tokens=line_tokens,
-            )
-        )
-    grouped.sort(key=lambda line: (line.center_y, line.xmin))
-    return grouped
+    return ocr_pil_tesseract_tokens(Image.open(image_path), lang)
 
 
 def find_regex_globally(lines: list[OCRLine], pattern: re.Pattern[str]) -> ExtractedField | None:
@@ -722,6 +677,11 @@ def extract_fields(lines: list[OCRLine]) -> dict[str, ExtractedField]:
         if biggest_amount:
             extracted["total_ttc"] = biggest_amount
 
+    if "nom_emetteur" not in extracted:
+        issuer = best_issuer(lines)
+        if issuer:
+            extracted["nom_emetteur"] = issuer
+
     return extracted
 
 
@@ -764,6 +724,39 @@ def largest_amount(lines: list[OCRLine]) -> ExtractedField | None:
         return None
     _, text, evidence, score = best_value
     return ExtractedField(value=text, method="largest_amount_fallback", confidence=score, evidence=evidence)
+
+
+def best_issuer(lines: list[OCRLine]) -> ExtractedField | None:
+    if not lines:
+        return None
+
+    page_top = min(line.ymin for line in lines)
+    page_bottom = max(line.ymax for line in lines)
+    top_cutoff = page_top + (page_bottom - page_top) * 0.35
+
+    for line in lines:
+        if line.center_y > top_cutoff:
+            break
+
+        text = line.text.strip()
+        normalized = normalize_text(text)
+        if len(re.findall(r"[A-Za-z]", text)) < 3:
+            continue
+        if any(noise in normalized for noise in ISSUER_SKIP_NOISE):
+            continue
+        if EMAIL_RE.search(text) or phone_from_text(text):
+            continue
+        if invoice_id_matches(text) or DATE_RE.search(text):
+            continue
+
+        return ExtractedField(
+            value=text,
+            method="top_of_page_fallback",
+            confidence=max((token.confidence for token in line.tokens), default=0.0),
+            evidence=text,
+        )
+
+    return None
 
 
 def parse_amount(text: str) -> float | None:

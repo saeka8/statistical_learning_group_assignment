@@ -2,9 +2,9 @@
 """Render training annotations into HTML overlays.
 
 Examples:
-  python3 Feature_Extraction_Invoice/visualize_labels.py --image 671_png_jpg.rf.p73UNqF5SQDjw12vTAI6.jpg
-  python3 Feature_Extraction_Invoice/visualize_labels.py --sample 5
-  python3 Feature_Extraction_Invoice/visualize_labels.py --image 671_png_jpg.rf.p73UNqF5SQDjw12vTAI6.jpg --open
+  python3 ai/extraction/visualize_labels.py --image 671_png_jpg.rf.p73UNqF5SQDjw12vTAI6.jpg
+  python3 ai/extraction/visualize_labels.py --sample 5
+  python3 ai/extraction/visualize_labels.py --image 671_png_jpg.rf.p73UNqF5SQDjw12vTAI6.jpg --open
 """
 
 from __future__ import annotations
@@ -42,7 +42,7 @@ PALETTE = [
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Preview object-detection boxes from train/_annotations.csv")
-    parser.add_argument("--image", help="Image filename inside Feature_Extraction_Invoice/train")
+    parser.add_argument("--image", help="Image filename inside ai/extraction/train")
     parser.add_argument("--sample", type=int, help="Render the first N annotated images")
     parser.add_argument("--open", action="store_true", help="Open generated preview files in the default browser")
     return parser

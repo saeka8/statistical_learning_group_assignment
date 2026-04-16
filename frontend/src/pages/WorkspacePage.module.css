@@ -89,6 +89,16 @@
   font-weight: 700;
 }
 
+.successBanner {
+  margin-bottom: var(--space-5);
+  padding: 0.95rem 1rem;
+  border-radius: 18px;
+  border: 1px solid rgba(91, 172, 134, 0.25);
+  background: rgba(91, 172, 134, 0.08);
+  color: var(--color-text-primary);
+  font-weight: 700;
+}
+
 @media (max-width: 1120px) {
   .dashboardGrid {
     grid-template-columns: 1fr;

@@ -18,20 +18,23 @@ import styles from './WorkspacePage.module.css';
 export function WorkspacePage() {
   const workspace = useWorkspace();
   const [actionError, setActionError] = useState<string | null>(null);
+  const [actionSuccess, setActionSuccess] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<'download' | 'rerun' | 'delete' | null>(null);
 
   useEffect(() => {
     setActionError(null);
+    setActionSuccess(null);
   }, [workspace.selectedDocumentId]);
 
   const handleDownload = async () => {
     if (!workspace.selectedDocumentId) return;
 
     setActionLoading('download');
+    setActionError(null);
+    setActionSuccess(null);
     try {
       const url = await downloadDocument(workspace.selectedDocumentId);
       window.open(url, '_blank', 'noopener,noreferrer');
-      setActionError(null);
     } catch (error) {
       setActionError(
         getUserFacingError(error, 'workspaceDownload', 'We could not download that document.')
@@ -45,10 +48,12 @@ export function WorkspacePage() {
     if (!workspace.selectedDocumentId) return;
 
     setActionLoading('rerun');
+    setActionError(null);
+    setActionSuccess(null);
     try {
       await rerunDocumentAnalysis(workspace.selectedDocumentId);
       workspace.reload();
-      setActionError(null);
+      setActionSuccess('Analysis queued — the document will update shortly.');
     } catch (error) {
       setActionError(
         getUserFacingError(error, 'workspaceRerun', 'We could not re-run analysis.')
@@ -61,11 +66,13 @@ export function WorkspacePage() {
   const handleDelete = async () => {
     if (!workspace.selectedDocumentId) return;
 
+    const idToDelete = workspace.selectedDocumentId;
     setActionLoading('delete');
+    setActionError(null);
+    setActionSuccess(null);
     try {
-      await deleteDocument(workspace.selectedDocumentId);
-      workspace.reload();
-      setActionError(null);
+      await deleteDocument(idToDelete);
+      workspace.removeDocument(idToDelete);
     } catch (error) {
       setActionError(
         getUserFacingError(error, 'workspaceDelete', 'We could not delete that document.')
@@ -113,6 +120,12 @@ export function WorkspacePage() {
           {actionError ? (
             <div className={styles.errorBanner} role="alert">
               {actionError}
+            </div>
+          ) : null}
+
+          {actionSuccess ? (
+            <div className={styles.successBanner} role="status">
+              {actionSuccess}
             </div>
           ) : null}
 

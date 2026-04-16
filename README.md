@@ -264,6 +264,8 @@ All endpoints are prefixed `/api/`. Authenticated routes require `Authorization:
 │   │   └── models/         # classifier.pkl, tfidf_vectorizer.pkl, yolo_paragraph.pt
 │   ├── config/             # Django settings (base / development / production)
 │   └── Dockerfile          # Includes Tesseract, libmagic, ML dependencies
+├── ai/
+│   └── extraction/         # Training scripts, OCR/YOLO experiments, and extraction docs
 ├── frontend/
 │   └── src/
 │       ├── services/       # api.ts, auth.ts, documents.ts — typed backend client

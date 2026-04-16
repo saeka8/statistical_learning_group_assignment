@@ -55,7 +55,7 @@ python3 -m pip install ultralytics
 For OCR:
 
 ```bash
-python3 -m pip install -r Feature_Extraction_Invoice/OCR_method/requirements_ocr.txt
+python3 -m pip install -r ai/extraction/OCR_method/requirements_ocr.txt
 ```
 
 If you use Tesseract, the system binary must also be installed.
@@ -63,20 +63,20 @@ If you use Tesseract, the system binary must also be installed.
 ## 1. Prepare Dataset
 
 ```bash
-python3 Feature_Extraction_Invoice/paragraph_yolo/train_paragraph_yolo.py --prepare-only --force
+python3 ai/extraction/paragraph_yolo/train_paragraph_yolo.py --prepare-only --force
 ```
 
 This builds:
 
-- `Feature_Extraction_Invoice/paragraph_yolo/prepared/`
-- `Feature_Extraction_Invoice/paragraph_yolo/data.yaml`
+- `ai/extraction/paragraph_yolo/prepared/`
+- `ai/extraction/paragraph_yolo/data.yaml`
 
 ## 2. Train YOLO
 
 Recommended starting command:
 
 ```bash
-python3 Feature_Extraction_Invoice/paragraph_yolo/train_paragraph_yolo.py \
+python3 ai/extraction/paragraph_yolo/train_paragraph_yolo.py \
   --epochs 20 \
   --imgsz 960 \
   --batch 4 \
@@ -86,7 +86,7 @@ python3 Feature_Extraction_Invoice/paragraph_yolo/train_paragraph_yolo.py \
 
 Training outputs go to:
 
-- `Feature_Extraction_Invoice/paragraph_yolo/runs/paragraph_table/`
+- `ai/extraction/paragraph_yolo/runs/paragraph_table/`
 
 Important files:
 
@@ -101,7 +101,7 @@ Use `best.pt` for inference.
 To visualize paragraph/table boxes on a new invoice image:
 
 ```bash
-python3 Feature_Extraction_Invoice/paragraph_yolo/predict_paragraph_yolo.py \
+python3 ai/extraction/paragraph_yolo/predict_paragraph_yolo.py \
   --image "/full/path/to/invoice.png" \
   --name paragraph_test
   
@@ -109,7 +109,7 @@ python3 Feature_Extraction_Invoice/paragraph_yolo/predict_paragraph_yolo.py \
 
 Outputs:
 
-- `Feature_Extraction_Invoice/paragraph_yolo/predictions/paragraph_test/`
+- `ai/extraction/paragraph_yolo/predictions/paragraph_test/`
 
 Important file:
 
@@ -120,7 +120,7 @@ Important file:
 This is the main end-to-end command for backend integration:
 
 ```bash
-python3 Feature_Extraction_Invoice/paragraph_yolo/ocr_by_regions.py \
+python3 ai/extraction/paragraph_yolo/ocr_by_regions.py \
   --image "/full/path/to/invoice.png" \
   --name invoice_grouped_ocr \
   --conf 0.5 \
@@ -138,9 +138,9 @@ What it does:
 
 Outputs:
 
-- `Feature_Extraction_Invoice/paragraph_yolo/region_ocr/invoice_grouped_ocr/region_ocr.json`
-- `Feature_Extraction_Invoice/paragraph_yolo/region_ocr/invoice_grouped_ocr/extracted_fields.json`
-- `Feature_Extraction_Invoice/paragraph_yolo/region_ocr/invoice_grouped_ocr/crops/`
+- `ai/extraction/paragraph_yolo/region_ocr/invoice_grouped_ocr/region_ocr.json`
+- `ai/extraction/paragraph_yolo/region_ocr/invoice_grouped_ocr/extracted_fields.json`
+- `ai/extraction/paragraph_yolo/region_ocr/invoice_grouped_ocr/crops/`
 
 ## Output Format
 
@@ -165,6 +165,7 @@ Supported field keys:
 
 - `Invoice_Number`
 - `Invoice_Date`
+- `Issuer_Name`
 - `Client_Name`
 - `Client_Email`
 - `Client_Phone`
@@ -217,4 +218,6 @@ If duplicate boxes remain high, tune:
 
 - `best.pt` is the checkpoint to use for inference, not `last.pt`
 - grouped OCR is useful because it avoids reading the whole page strictly left-to-right
+- post-OCR field extraction is heuristic: anchor words + regexes + region-type rules, not a transformer model
+- money fields such as `Subtotal`, `VAT`, `Discount`, and `Total` now prefer `table` regions and only fall back to paragraph regions when needed
 - final quality still depends on whether the detector keeps the right regions, especially the totals block
