@@ -39,6 +39,7 @@ services:
     env_file: .env
     volumes:
       - ./backend:/app
+      - ./ai:/app/ai
     ports:
       - "8000:8000"
     depends_on:
@@ -53,6 +54,7 @@ services:
     env_file: .env
     volumes:
       - ./backend:/app
+      - ./ai:/app/ai
     depends_on:
       db:
         condition: service_healthy

@@ -22,6 +22,7 @@ interface WorkspaceState {
   setLabel: (label: WorkspaceDocumentLabelFilter) => void;
   setOrdering: (ordering: WorkspaceDocumentOrdering) => void;
   selectDocument: (id: string) => void;
+  removeDocument: (id: string) => void;
   reload: () => void;
 }
 
@@ -170,6 +171,16 @@ export function useWorkspace(): WorkspaceState {
     setLabel,
     setOrdering,
     selectDocument: setSelectedDocumentId,
+    removeDocument: (id: string) => {
+      // Immediately drop the document from the local list — no loading state,
+      // no error banner. The useEffect watching `documents` will auto-select
+      // the next document (or show empty state if it was the last one).
+      setDocuments((prev) => prev.filter((d) => d.backendId !== id));
+      // Quietly refresh summary counts in the background.
+      getWorkspaceSummary()
+        .then((data) => setSummary(data))
+        .catch(() => {});
+    },
     reload: () => {
       loadSummary();
       loadDocuments();

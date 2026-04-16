@@ -19,11 +19,11 @@ def upload_file(file_obj, storage_key: str) -> None:
 
 
 def delete_file(storage_key: str) -> None:
-    """Delete an object from the bucket. Silently ignores missing keys."""
-    client = _s3_client()
+    """Delete an object from the bucket. Silently ignores any storage errors."""
     try:
+        client = _s3_client()
         client.delete_object(Bucket=settings.AWS_STORAGE_BUCKET_NAME, Key=storage_key)
-    except ClientError:
+    except Exception:
         pass
 
 

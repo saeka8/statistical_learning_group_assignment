@@ -17,7 +17,6 @@ import re
 import sys
 import unicodedata
 import logging
-from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from typing import TypedDict
@@ -29,10 +28,10 @@ logger = logging.getLogger(__name__)
 
 ML_DIR = os.path.dirname(os.path.abspath(__file__))
 MODELS_DIR = os.path.join(ML_DIR, "models")
-REPO_ROOT = os.path.dirname(os.path.dirname(ML_DIR))
+APP_ROOT = os.path.dirname(ML_DIR)  # /app inside Docker, backend/ locally
 
-if REPO_ROOT not in sys.path:
-    sys.path.insert(0, REPO_ROOT)
+if APP_ROOT not in sys.path:
+    sys.path.insert(0, APP_ROOT)
 
 from ai.extraction.paragraph_yolo.shared_pipeline import (
     CLASS_NAMES,
@@ -143,71 +142,9 @@ def _filter_detections(
 
 # ── OCR helpers ───────────────────────────────────────────────────────────────
 
-@dataclass
-class _OCRToken:
-    text: str
-    confidence: float
-    xmin: float
-    ymin: float
-    xmax: float
-    ymax: float
-
-    @property
-    def center_y(self) -> float:
-        return (self.ymin + self.ymax) / 2.0
-
-    @property
-    def height(self) -> float:
-        return max(1.0, self.ymax - self.ymin)
-
-
-@dataclass
-class _OCRLine:
-    text: str
-    tokens: list
-
-
-def _ocr_crop_tesseract(crop: Image.Image, lang: str = "eng+fra") -> list[_OCRLine]:
+def _ocr_crop_tesseract(crop: Image.Image, lang: str = "eng+fra"):
     """Run Tesseract on a PIL image crop and return grouped OCR lines."""
     return _shared_ocr_pil_tesseract(crop, lang)
-
-
-_COLUMN_GAP_FACTOR = 4.0  # horizontal gap > this × median height = different column
-
-
-def _group_lines(tokens: list[_OCRToken]) -> list[_OCRLine]:
-    if not tokens:
-        return []
-
-    heights = sorted(t.height for t in tokens)
-    median_height = heights[len(heights) // 2]
-    y_tolerance = max(6.0, median_height * 0.5)
-    gap_threshold = median_height * _COLUMN_GAP_FACTOR
-
-    lines: list[list[_OCRToken]] = []
-    for token in tokens:
-        placed = False
-        for line_tokens in lines:
-            avg_y = sum(t.center_y for t in line_tokens) / len(line_tokens)
-            if abs(token.center_y - avg_y) > y_tolerance:
-                continue
-            line_xmin = min(t.xmin for t in line_tokens)
-            line_xmax = max(t.xmax for t in line_tokens)
-            if token.xmin > line_xmax + gap_threshold or token.xmax < line_xmin - gap_threshold:
-                continue
-            line_tokens.append(token)
-            placed = True
-            break
-        if not placed:
-            lines.append([token])
-
-    result = []
-    for line_tokens in lines:
-        line_tokens.sort(key=lambda t: t.xmin)
-        text = " ".join(t.text for t in line_tokens).strip()
-        result.append(_OCRLine(text=text, tokens=line_tokens))
-    result.sort(key=lambda ln: (min(t.center_y for t in ln.tokens), min(t.xmin for t in ln.tokens)))
-    return result
 
 
 # ── Field extraction ──────────────────────────────────────────────────────────

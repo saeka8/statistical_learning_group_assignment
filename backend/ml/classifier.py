@@ -2,8 +2,8 @@
 Document classifier — hybrid NLP + Computer Vision pipeline.
 
 Retrieves a document from MinIO, runs OCR (Tesseract), extracts
-500 TF-IDF text features + 33 handcrafted image features, and
-classifies via a trained Random Forest model.
+TF-IDF bigram features + 33 handcrafted image features + 15 text
+meta-features, and classifies via a trained ensemble model.
 
 Interface:
     from ml.classifier import classify
@@ -12,6 +12,7 @@ Interface:
 
 import io
 import os
+import re
 import pickle
 import warnings
 import logging
@@ -31,16 +32,15 @@ logger = logging.getLogger(__name__)
 ML_DIR = os.path.dirname(os.path.abspath(__file__))
 MODELS_DIR = os.path.join(ML_DIR, "models")
 
-# ── lazy-loaded singletons ───────────────────────────────────────
+# ── lazy-loaded singleton ────────────────────────────────────────
 _model_data = None
-_tfidf = None
 
 
 def _load_model():
-    """Load the trained classifier, scaler, and label encoder."""
+    """Load the trained classifier (includes TF-IDF, scaler, label encoder)."""
     global _model_data
     if _model_data is None:
-        path = os.path.join(MODELS_DIR, "classifier.pkl")
+        path = os.path.join(MODELS_DIR, "improved_classifier.pkl")
         with open(path, "rb") as f:
             _model_data = pickle.load(f)
         logger.info(
@@ -49,17 +49,6 @@ def _load_model():
             list(_model_data["label_encoder"].classes_),
         )
     return _model_data
-
-
-def _load_tfidf():
-    """Load the fitted TF-IDF vectorizer."""
-    global _tfidf
-    if _tfidf is None:
-        path = os.path.join(MODELS_DIR, "tfidf_vectorizer.pkl")
-        with open(path, "rb") as f:
-            _tfidf = pickle.load(f)
-        logger.info("TF-IDF vectorizer loaded (max_features=%s)", _tfidf.max_features)
-    return _tfidf
 
 
 # ── MinIO helper ─────────────────────────────────────────────────
@@ -75,7 +64,62 @@ def _download_from_minio(storage_key: str) -> bytes:
     return response["Body"].read()
 
 
-# ── feature extraction ───────────────────────────────────────────
+# ── text helpers ─────────────────────────────────────────────────
+def _clean_ocr_text(text: str) -> str:
+    """Remove OCR noise: non-ASCII garbage, collapsed whitespace, tiny tokens."""
+    text = text.encode("ascii", errors="ignore").decode("ascii")
+    text = re.sub(r'\s+', ' ', text)
+    tokens = text.split()
+    tokens = [t for t in tokens if len(t) > 1 or t.isdigit()]
+    return " ".join(tokens)
+
+
+def _extract_text_meta(text: str) -> list:
+    """Extract 15 hand-crafted text meta-features."""
+    clean = _clean_ocr_text(text)
+    words = clean.split()
+    lines = text.strip().split('\n')
+
+    n_chars = len(text)
+    n_words = len(words)
+    n_lines = len(lines)
+    avg_word_len = float(np.mean([len(w) for w in words])) if words else 0.0
+    avg_line_len = float(np.mean([len(l) for l in lines])) if lines else 0.0
+
+    n_digits = sum(c.isdigit() for c in text)
+    n_upper = sum(c.isupper() for c in text)
+    n_special = sum(not c.isalnum() and not c.isspace() for c in text)
+    digit_ratio = n_digits / max(n_chars, 1)
+    upper_ratio = n_upper / max(n_chars, 1)
+    special_ratio = n_special / max(n_chars, 1)
+
+    text_lower = text.lower()
+    invoice_kw = sum(1 for kw in ['invoice', 'total', 'amount', 'due date',
+                                   'bill to', 'subtotal', 'tax', 'payment']
+                     if kw in text_lower)
+    email_kw = sum(1 for kw in ['from:', 'to:', 'subject:', 'sent:',
+                                 'dear', 'regards', 'sincerely', 'cc:']
+                   if kw in text_lower)
+    resume_kw = sum(1 for kw in ['experience', 'education', 'skills',
+                                  'objective', 'references', 'university',
+                                  'degree', 'employment']
+                    if kw in text_lower)
+    sci_kw = sum(1 for kw in ['abstract', 'introduction', 'conclusion',
+                               'references', 'methodology', 'results',
+                               'figure', 'table', 'et al']
+                 if kw in text_lower)
+
+    return [
+        n_chars, n_words, n_lines, avg_word_len, avg_line_len,
+        digit_ratio, upper_ratio, special_ratio,
+        invoice_kw, email_kw, resume_kw, sci_kw,
+        float('@' in text),
+        float('$' in text or '€' in text or '£' in text),
+        float(bool(re.search(r'\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b', text))),
+    ]
+
+
+# ── image feature extraction ─────────────────────────────────────
 def _extract_image_features(img: Image.Image, target_size=(256, 256)) -> list:
     """Extract 33 handcrafted visual features from a PIL Image."""
     img_gray = img.convert("L").resize(target_size)
@@ -96,7 +140,7 @@ def _extract_image_features(img: Image.Image, target_size=(256, 256)) -> list:
         float(np.median(hog_feat)),
     ]
 
-    # 2. Text density — binarize + 4x4 grid (1 + 16 features)
+    # 2. Text density — binarize + 4×4 grid (1 + 16 features)
     binary = (img_arr < 128).astype(float)
     text_density = float(np.mean(binary))
 
@@ -106,7 +150,7 @@ def _extract_image_features(img: Image.Image, target_size=(256, 256)) -> list:
     grid_densities = []
     for i in range(grid_size):
         for j in range(grid_size):
-            region = binary[i * grid_h : (i + 1) * grid_h, j * grid_w : (j + 1) * grid_w]
+            region = binary[i * grid_h:(i + 1) * grid_h, j * grid_w:(j + 1) * grid_w]
             grid_densities.append(float(np.mean(region)))
 
     # 3. Whitespace features (6 features)
@@ -114,16 +158,15 @@ def _extract_image_features(img: Image.Image, target_size=(256, 256)) -> list:
     col_means = np.mean(binary, axis=0)
     blank_rows = float(np.sum(row_means < 0.01) / len(row_means))
     blank_cols = float(np.sum(col_means < 0.01) / len(col_means))
-
-    top_half_density = float(np.mean(binary[: h // 2, :]))
-    bottom_half_density = float(np.mean(binary[h // 2 :, :]))
-    left_half_density = float(np.mean(binary[:, : w // 2]))
-    right_half_density = float(np.mean(binary[:, w // 2 :]))
+    top_half_density = float(np.mean(binary[:h // 2, :]))
+    bottom_half_density = float(np.mean(binary[h // 2:, :]))
+    left_half_density = float(np.mean(binary[:, :w // 2]))
+    right_half_density = float(np.mean(binary[:, w // 2:]))
 
     # 4. Edge features (2 features)
     edges_h = sobel(img_arr.astype(float), axis=0)
     edges_v = sobel(img_arr.astype(float), axis=1)
-    edge_magnitude = np.sqrt(edges_h**2 + edges_v**2)
+    edge_magnitude = np.sqrt(edges_h ** 2 + edges_v ** 2)
     edge_density = float(np.mean(edge_magnitude))
     edge_std = float(np.std(edge_magnitude))
 
@@ -150,6 +193,7 @@ def _extract_image_features(img: Image.Image, target_size=(256, 256)) -> list:
     )
 
 
+# ── OCR helpers ──────────────────────────────────────────────────
 def _ocr_from_image(img: Image.Image) -> str:
     """Run Tesseract OCR on a PIL Image and return the text."""
     return pytesseract.image_to_string(img)
@@ -162,7 +206,6 @@ def _ocr_from_pdf(file_bytes: bytes):
     the first page rendered as an image.
     Returns (text, first_page_image).
     """
-    # Try native text extraction first
     try:
         from pdfminer.high_level import extract_text as pdf_extract_text
 
@@ -173,7 +216,6 @@ def _ocr_from_pdf(file_bytes: bytes):
     except Exception:
         pass
 
-    # Fall back to OCR on rendered image
     img = _pdf_first_page_image(file_bytes)
     text = pytesseract.image_to_string(img)
     return text, img
@@ -217,16 +259,19 @@ def classify(storage_key: str, content_type: str) -> ClassificationOutput:
 
     1. Downloads the file from MinIO.
     2. Runs OCR to extract text (or native PDF text extraction).
-    3. Extracts 500 TF-IDF features + 33 image features = 533 total.
-    4. Classifies with the trained Random Forest model.
+    3. Cleans OCR text and extracts:
+         - TF-IDF bigram features  (from model's stored vectorizer)
+         - 33 handcrafted image features
+         - 15 text meta-features
+    4. Classifies with the trained ensemble model.
     5. Returns predicted label, confidence, and per-class scores.
     """
     model_data = _load_model()
-    tfidf = _load_tfidf()
 
     model = model_data["model"]
     scaler = model_data["scaler"]
     label_encoder = model_data["label_encoder"]
+    tfidf = model_data["tfidf_vectorizer"]
     model_name = model_data["model_name"]
 
     # Step 1: Download from MinIO
@@ -245,9 +290,11 @@ def classify(storage_key: str, content_type: str) -> ClassificationOutput:
     logger.info("OCR extracted %d characters", len(ocr_text))
 
     # Step 3: Extract features
-    tfidf_vec = tfidf.transform([ocr_text]).toarray()                   # (1, 500)
-    img_feat = np.array(_extract_image_features(img)).reshape(1, -1)    # (1, 33)
-    hybrid_features = np.hstack([tfidf_vec, img_feat])                  # (1, 533)
+    clean_text = _clean_ocr_text(ocr_text)
+    tfidf_vec = tfidf.transform([clean_text]).toarray()                    # (1, N)
+    img_feat = np.array(_extract_image_features(img)).reshape(1, -1)      # (1, 33)
+    meta_feat = np.array(_extract_text_meta(ocr_text)).reshape(1, -1)     # (1, 15)
+    hybrid_features = np.hstack([tfidf_vec, img_feat, meta_feat])
     hybrid_scaled = scaler.transform(hybrid_features)
 
     # Step 4: Classify

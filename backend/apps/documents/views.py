@@ -82,8 +82,12 @@ class DocumentDetailView(generics.RetrieveDestroyAPIView):
 
     def destroy(self, request, *args, **kwargs):
         doc = self.get_object()
-        delete_file(doc.storage_key)
+        storage_key = doc.storage_key
         doc.delete()
+        # Clean up the file from storage in the background so the HTTP
+        # response is not blocked by a slow or temporarily unreachable MinIO.
+        from django_q.tasks import async_task
+        async_task("apps.documents.storage.delete_file", storage_key)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
