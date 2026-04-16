@@ -68,7 +68,7 @@ Limitations:
 
 ## Chosen Approach
 
-We are currently maintaining three extraction tracks in parallel:
+We are currently maintaining four extraction tracks in parallel:
 
 ### Primary Track
 
@@ -263,6 +263,55 @@ When using the `paragraph` / `table` detector, this post-processing step becomes
 - apply field extraction rules on that crop only
 
 This reduces confusion compared with full-page OCR because totals, invoice metadata, and product rows are no longer mixed together across the whole page.
+
+### Experimental Track — OCR-Free End-to-End Generation (Donut)
+
+```text
+invoice image -> Donut (vision encoder + text decoder) -> JSON output
+```
+
+Reason:
+
+We explored an OCR-free approach using Donut, which directly generates structured outputs from document images. Unlike traditional pipelines that separate OCR and extraction, this method learns layout, text recognition, and field mapping jointly. While promising, it requires more data and computational resources, making it suitable as an experimental extension rather than a replacement in our system.
+
+This track is fundamentally different from all three others because it contains **no OCR step at all**:
+
+| Step | OCR Method | YOLO + OCR | Paragraph + OCR | **Donut** |
+|---|---|---|---|---|
+| OCR | ✅ Yes | ✅ Yes | ✅ Yes | ❌ No |
+| Bounding boxes | ❌ No | ✅ Yes | ✅ Yes | ❌ No |
+| End-to-end learning | ❌ No | ❌ No | ❌ No | ✅ Yes |
+
+Donut combines a vision encoder (Swin Transformer) that reads the document image and a text decoder (BART-like) that generates the output token by token. Internally it learns reading, layout, and field meaning all at once — there is no intermediate text representation, so OCR errors cannot propagate.
+
+Advantages:
+
+- No OCR error propagation (`1450` never becomes `14S0`)
+- No bounding box annotations required
+- Simpler pipeline: image → JSON directly
+- Most "human-like" understanding of layout and structure
+
+Tradeoffs:
+
+- Data hungry — needs many image + JSON label pairs
+- Heavier to train — GPU strongly recommended
+- Harder to debug — wrong output is just wrong JSON with no intermediate step
+
+We use the pretrained `naver-clova-ix/donut-base` checkpoint from HuggingFace and lightly fine-tune it rather than training from scratch. For this experimental track we focus on a concise field subset: `invoice_number`, `date`, and `total`.
+
+This track represents the natural next step in the project's pipeline evolution:
+
+- Stage 1: Read then think (OCR + regex)
+- Stage 2: Look then read (YOLO + OCR)
+- Stage 3: End-to-end understanding (Donut)
+
+Even if performance is lower than the other tracks on our small dataset, the comparison is academically meaningful because Donut may be more robust on invoices with unusual layouts and its error types differ fundamentally from OCR-based methods.
+
+Implementation files:
+
+- `Donut/donut_invoice_extraction.ipynb`
+- `Donut/requirements.txt`
+- `Donut/README.md`
 
 ## Why Not OCR + Transformer Only
 
