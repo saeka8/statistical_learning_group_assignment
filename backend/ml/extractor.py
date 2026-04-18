@@ -1,14 +1,14 @@
 """
-Invoice field extractor — paragraph/table YOLO + Tesseract OCR pipeline.
+Invoice field extractor — preprocessing + Tesseract OCR + LayoutLM pipeline.
 
 Pipeline:
     1. Download file from MinIO
     2. Convert to PIL Image (handles PDF via PyMuPDF)
-    3. Run YOLOv8 to detect paragraph/table regions (2 classes)
-    4. Deduplicate overlapping boxes of the same class
-    5. Crop each kept region
-    6. OCR each crop with Tesseract
-    7. Extract structured invoice fields from grouped region text
+    3. Preprocess image (LAB-L, CLAHE, background normalisation)
+    4. Full-page Tesseract OCR → tokens with bounding boxes
+    5. Cluster tokens into spatial paragraph regions (by y-gap)
+    6. LayoutLM document-QA on the original image (primary extraction)
+    7. Anchor-based regex extraction on clustered regions (fallback / gap-fill)
 """
 
 import io
@@ -20,28 +20,24 @@ from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from typing import TypedDict
 
-import pytesseract
 from PIL import Image
 
 logger = logging.getLogger(__name__)
 
 ML_DIR = os.path.dirname(os.path.abspath(__file__))
-MODELS_DIR = os.path.join(ML_DIR, "models")
 
-CLASS_NAMES = {0: "paragraph", 1: "table"}
+# Make the repo-root `ai/` package importable inside Docker (/app/ai → /app is APP_ROOT)
+import sys as _sys
+_APP_ROOT = os.path.dirname(ML_DIR)
+if _APP_ROOT not in _sys.path:
+    _sys.path.insert(0, _APP_ROOT)
 
-# Lazy-loaded YOLO model singleton
-_yolo_model = None
-
-
-def _load_yolo():
-    global _yolo_model
-    if _yolo_model is None:
-        from ultralytics import YOLO
-        path = os.path.join(MODELS_DIR, "yolo_paragraph.pt")
-        _yolo_model = YOLO(path)
-        logger.info("Paragraph YOLO model loaded from %s", path)
-    return _yolo_model
+from ai.extraction.OCR_method.shared_ocr import (
+    ocr_pil_tesseract_tokens as _ocr_pil_tesseract_tokens,
+    group_lines as _group_lines,
+)
+from ai.extraction.preprocessing_invoice.pipeline import preprocess_invoice_image as _preprocess_invoice_image
+from ai.extraction.layoutlm.extractor import extract_with_layoutlm as _extract_with_layoutlm
 
 
 # ── MinIO helper ──────────────────────────────────────────────────────────────
@@ -73,149 +69,66 @@ def _to_image(file_bytes: bytes, content_type: str) -> Image.Image:
     return Image.open(io.BytesIO(file_bytes)).convert("RGB")
 
 
-# ── Bounding box helpers ──────────────────────────────────────────────────────
+# ── Spatial clustering ────────────────────────────────────────────────────────
 
-def _box_iou(box_a: list, box_b: list) -> float:
-    ax1, ay1, ax2, ay2 = box_a
-    bx1, by1, bx2, by2 = box_b
-    inter_x1 = max(ax1, bx1)
-    inter_y1 = max(ay1, by1)
-    inter_x2 = min(ax2, bx2)
-    inter_y2 = min(ay2, by2)
-    inter_w = max(0.0, inter_x2 - inter_x1)
-    inter_h = max(0.0, inter_y2 - inter_y1)
-    inter_area = inter_w * inter_h
-    if inter_area <= 0:
-        return 0.0
-    area_a = max(0.0, ax2 - ax1) * max(0.0, ay2 - ay1)
-    area_b = max(0.0, bx2 - bx1) * max(0.0, by2 - by1)
-    union = area_a + area_b - inter_area
-    return inter_area / union if union > 0 else 0.0
+def _cluster_tokens_into_regions(tokens: list) -> list[dict]:
+    """Group OCR tokens into paragraph-like regions by vertical gap.
 
-
-def _containment_ratio(box_a: list, box_b: list) -> float:
-    ax1, ay1, ax2, ay2 = box_a
-    bx1, by1, bx2, by2 = box_b
-    inter_x1 = max(ax1, bx1)
-    inter_y1 = max(ay1, by1)
-    inter_x2 = min(ax2, bx2)
-    inter_y2 = min(ay2, by2)
-    inter_w = max(0.0, inter_x2 - inter_x1)
-    inter_h = max(0.0, inter_y2 - inter_y1)
-    inter_area = inter_w * inter_h
-    if inter_area <= 0:
-        return 0.0
-    area_a = max(0.0, ax2 - ax1) * max(0.0, ay2 - ay1)
-    area_b = max(0.0, bx2 - bx1) * max(0.0, by2 - by1)
-    smaller = min(area_a, area_b)
-    return inter_area / smaller if smaller > 0 else 0.0
-
-
-def _filter_detections(
-    detections: list,
-    dedup_iou: float = 0.6,
-    containment_threshold: float = 0.85,
-    max_paragraphs: int = 12,
-    max_tables: int = 3,
-) -> list:
-    """Deduplicate same-label boxes and cap counts per label."""
-    kept = []
-    counts = {"paragraph": 0, "table": 0}
-
-    for det in sorted(detections, key=lambda d: d["confidence"], reverse=True):
-        label = det["label"]
-        limit = max_tables if label == "table" else max_paragraphs
-        if counts[label] >= limit:
-            continue
-
-        duplicate = False
-        for existing in kept:
-            if existing["label"] != label:
-                continue
-            if _box_iou(existing["xyxy"], det["xyxy"]) >= dedup_iou:
-                duplicate = True
-                break
-            if _containment_ratio(existing["xyxy"], det["xyxy"]) >= containment_threshold:
-                duplicate = True
-                break
-        if not duplicate:
-            kept.append(det)
-            counts[label] += 1
-
-    kept.sort(key=lambda d: (d["xyxy"][1], d["xyxy"][0]))
-    return kept
-
-
-def _padded_box(
-    x1: int,
-    y1: int,
-    x2: int,
-    y2: int,
-    image_width: int,
-    image_height: int,
-    pad_ratio: float = 0.02,
-    min_pad: int = 12,
-) -> tuple[int, int, int, int]:
-    width = max(1, x2 - x1)
-    height = max(1, y2 - y1)
-    pad_x = max(min_pad, int(round(width * pad_ratio)))
-    pad_y = max(min_pad, int(round(height * pad_ratio)))
-    return (
-        max(0, x1 - pad_x),
-        max(0, y1 - pad_y),
-        min(image_width, x2 + pad_x),
-        min(image_height, y2 + pad_y),
-    )
-
-
-# ── OCR helpers ───────────────────────────────────────────────────────────────
-
-def _ocr_crop_tesseract(crop: Image.Image, lang: str = "eng+fra"):
-    """Run Tesseract on a PIL image crop and return grouped OCR lines."""
-    return _shared_ocr_pil_tesseract(crop, lang)
-
-
-_COLUMN_GAP_FACTOR = 4.0  # horizontal gap > this × median height = different column
-
-
-def _group_lines(tokens: list[_OCRToken]) -> list[_OCRLine]:
+    Tokens are sorted top-to-bottom.  A new region starts whenever the gap
+    between the bottom of the previous token and the top of the next exceeds
+    2× the median token height (minimum 30 px).  Each cluster is returned as
+    a region dict compatible with ``_extract_fields_from_regions``.
+    """
     if not tokens:
         return []
 
-    heights = sorted(t.height for t in tokens)
-    median_height = heights[len(heights) // 2]
-    y_tolerance = max(6.0, median_height * 0.5)
-    gap_threshold = median_height * _COLUMN_GAP_FACTOR
+    tokens_sorted = sorted(tokens, key=lambda t: (t.ymin, t.xmin))
+    heights = sorted(t.height for t in tokens_sorted)
+    median_h = heights[len(heights) // 2] if heights else 20.0
+    gap_threshold = max(median_h * 2.0, 30.0)
 
-    lines: list[list[_OCRToken]] = []
-    for token in tokens:
-        placed = False
-        for line_tokens in lines:
-            avg_y = sum(t.center_y for t in line_tokens) / len(line_tokens)
-            if abs(token.center_y - avg_y) > y_tolerance:
-                continue
-            line_xmin = min(t.xmin for t in line_tokens)
-            line_xmax = max(t.xmax for t in line_tokens)
-            if token.xmin > line_xmax + gap_threshold or token.xmax < line_xmin - gap_threshold:
-                continue
-            line_tokens.append(token)
-            placed = True
-            break
-        if not placed:
-            lines.append([token])
+    clusters: list[list] = []
+    current: list = []
+    prev_ymax: float | None = None
 
-    result = []
-    for line_tokens in lines:
-        line_tokens.sort(key=lambda t: t.xmin)
-        text = " ".join(t.text for t in line_tokens).strip()
-        result.append(_OCRLine(text=text, tokens=line_tokens))
-    result.sort(key=lambda ln: (min(t.center_y for t in ln.tokens), min(t.xmin for t in ln.tokens)))
-    return result
+    for token in tokens_sorted:
+        if prev_ymax is not None and token.ymin - prev_ymax > gap_threshold:
+            if current:
+                clusters.append(current)
+            current = []
+        current.append(token)
+        prev_ymax = token.ymax
+    if current:
+        clusters.append(current)
+
+    regions = []
+    for idx, cluster in enumerate(clusters):
+        ocr_lines = _group_lines(cluster)
+        region_text = "\n".join(ln.text for ln in ocr_lines if ln.text.strip())
+        region_lines = [ln.text for ln in ocr_lines if ln.text.strip()]
+        if not region_lines:
+            continue
+        regions.append({
+            "label": "paragraph",
+            "confidence": 0.0,
+            "xyxy": [
+                min(t.xmin for t in cluster),
+                min(t.ymin for t in cluster),
+                max(t.xmax for t in cluster),
+                max(t.ymax for t in cluster),
+            ],
+            "region_index": idx,
+            "text": region_text,
+            "lines": region_lines,
+            "line_count": len(region_lines),
+        })
+
+    return regions
 
 
 # ── Field extraction ──────────────────────────────────────────────────────────
 
-# Regex patterns aligned with the current ai/extraction implementation.
+# Regex patterns
 _EMAIL_RE = re.compile(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", re.IGNORECASE)
 _PHONE_RE = re.compile(r"(?:(?:\+\d{1,3}[\s.-]?)?(?:\(?\d{2,4}\)?[\s.-]?){2,5}\d{2,4})")
 _MONEY_RE = re.compile(
@@ -267,7 +180,8 @@ _CLIENT_ANCHORS = (
     "nombre:",
     "nombre ",
     "cliente",
-    "payable to",
+    # NOTE: "payable to" intentionally excluded — appears in payment instructions
+    # ("please make checks payable to: <issuer>") which is the issuer, not the client
 )
 
 _ADDRESS_ANCHORS = (
@@ -352,9 +266,33 @@ def _looks_like_phone_token(text: str) -> bool:
     return bool(re.fullmatch(r"[\d().+\-\s]+", compact))
 
 
+_STREET_SUFFIXES = re.compile(
+    r"\b(lane|ln|street|st|avenue|ave|road|rd|drive|dr|blvd|boulevard|court|ct|place|pl|way|circle|cir)\b",
+    re.IGNORECASE,
+)
+
+# Common postal code patterns — should not be confused with invoice numbers
+_POSTAL_CODE_RE = re.compile(
+    r"^(?:"
+    r"[A-Z]{1,2}\d{1,2}[A-Z]?\s*\d[A-Z]{2}"   # UK: W91AE, SW1A 2AA
+    r"|\d{5}(?:-\d{4})?"                         # US: 12345 or 12345-6789
+    r"|[A-Z]\d[A-Z]\s*\d[A-Z]\d"                # Canada: A1B 2C3
+    r"|\d{4,5}"                                   # generic 4-5 digit zip
+    r")$",
+    re.IGNORECASE,
+)
+
+
+def _is_postal_code(token: str) -> bool:
+    return bool(_POSTAL_CODE_RE.match(token.strip()))
+
+
 def _invoice_number_from_text(text: str):
     normalized = _normalize(text)
     if "nif" in normalized:
+        return None
+    # Skip lines that look like postal addresses
+    if _STREET_SUFFIXES.search(text):
         return None
     patterns = [
         r"(?:invoice\s*(?:no|number|#)?|facture\s*(?:n|no|numero)?|factura\s*(?:n|no|numero|n°)?)\s*[:#-]?\s*([A-Z0-9./_-]{3,})",
@@ -364,11 +302,20 @@ def _invoice_number_from_text(text: str):
         match = re.search(pattern, normalized, re.IGNORECASE)
         if match:
             value = match.group(1).strip()
-            if sum(char.isdigit() for char in value) >= 3 and not _looks_like_phone_token(value):
+            if sum(char.isdigit() for char in value) >= 3 and not _looks_like_phone_token(value) and not _is_postal_code(value):
                 return value
 
-    for token in re.findall(r"\b[A-Z0-9./_-]{4,}\b", text, re.IGNORECASE):
-        if sum(char.isdigit() for char in token) >= 4 and not _looks_like_phone_token(token):
+    # Prefer alphanumeric tokens (mix of letters + digits) over pure numeric ones
+    candidates = re.findall(r"\b[A-Z0-9./_-]{4,}\b", text, re.IGNORECASE)
+    alphanumeric = [
+        t for t in candidates
+        if re.search(r"[A-Za-z]", t) and re.search(r"\d", t)
+        and not _looks_like_phone_token(t) and not _is_postal_code(t)
+    ]
+    if alphanumeric:
+        return alphanumeric[0]
+    for token in candidates:
+        if sum(char.isdigit() for char in token) >= 4 and not _looks_like_phone_token(token) and not _is_postal_code(token):
             return token
     return None
 
@@ -400,6 +347,17 @@ def _extract_address_lines(lines: list[str]) -> str | None:
     return kept[0]
 
 
+def _is_header_line(line: str) -> bool:
+    """Return True if the line looks like an all-caps label/header, not a name."""
+    stripped = line.strip()
+    letters = [c for c in stripped if c.isalpha()]
+    if not letters:
+        return False
+    # More than 80 % of alphabetic chars are uppercase AND line has 2+ words → header
+    upper_ratio = sum(1 for c in letters if c.isupper()) / len(letters)
+    return upper_ratio > 0.8 and len(stripped.split()) >= 2
+
+
 def _extract_name(lines: list[str]) -> str | None:
     for line in lines:
         normalized = _normalize(line)
@@ -407,7 +365,9 @@ def _extract_name(lines: list[str]) -> str | None:
             continue
         if _cleaned_email(line) or _cleaned_phone(line):
             continue
-        if any(anchor in normalized for anchor in ("invoice", "date", "description", "subtotal", "discount", "tax", "vat", "total")):
+        if any(anchor in normalized for anchor in ("invoice", "date", "description", "subtotal", "discount", "tax", "vat", "total", "terms", "conditions", "payment", "amount", "quantity", "purchase", "price", "due")):
+            continue
+        if _is_header_line(line):
             continue
         line = re.sub(r"^(Nombre)\s*:\s*", "", line).strip()
         if any(char.isalpha() for char in line):
@@ -476,15 +436,20 @@ def _metadata_date_from_lines(lines: list[str], anchor: str) -> str | None:
 
 
 def _metadata_value_by_anchor(lines: list[str], anchors: tuple[str, ...]) -> str | None:
-    for line in lines:
+    for index, line in enumerate(lines):
         normalized = _normalize(line)
         if not any(anchor in normalized for anchor in anchors):
             continue
         if "nif" in normalized:
             continue
-        value = _invoice_number_from_text(line)
-        if value:
-            return value
+        # The label and value are often on separate lines, sometimes several lines apart
+        # (e.g. multi-column headers: "Invoice number | Amount Due | Date" then values below).
+        # Scan ahead up to 4 lines, stopping early if we find a non-label, non-empty line.
+        candidates = [line] + lines[index + 1: index + 5]
+        for candidate in candidates:
+            value = _invoice_number_from_text(candidate)
+            if value:
+                return value
     return None
 
 
@@ -493,9 +458,6 @@ def _best_contact_block(regions: list[dict]) -> dict | None:
     best_score = -1
 
     for region in regions:
-        if region.get("label") != "paragraph":
-            continue
-
         lines = [line.strip() for line in region.get("lines", []) if line.strip()]
         if not lines:
             continue
@@ -534,7 +496,7 @@ def _extract_fields_from_regions(regions: list) -> dict:
     all_lines: list[tuple[str, str]] = []
 
     for region in regions:
-        label = region.get("label", "")
+        label = region.get("label", "paragraph")
         text = region.get("text", "") or ""
         lines = [line.strip() for line in region.get("lines", []) if line.strip()]
         normalized = _normalize(text)
@@ -542,12 +504,8 @@ def _extract_fields_from_regions(regions: list) -> dict:
         for line in lines:
             all_lines.append((line, label))
 
-        if label == "table":
-            _set_field(payload, "Products", _extract_products(lines), "table_region", text)
-            _extract_totals(payload, lines, text, "table_totals_region")
-
         if any(anchor in normalized for anchor in ("description", "designation", "item", "items", "products")):
-            _set_field(payload, "Products", _extract_products(lines), "paragraph_region_products", text)
+            _set_field(payload, "Products", _extract_products(lines), "region_products", text)
 
         if any(anchor in normalized for anchor in _ISSUER_ANCHORS):
             _set_field(payload, "Issuer_Name", _extract_name(lines), "issuer_region", text)
@@ -576,8 +534,8 @@ def _extract_fields_from_regions(regions: list) -> dict:
                 _set_field(payload, "Client_Email", _cleaned_email(line), "metadata_region", text)
                 _set_field(payload, "Client_Phone", _cleaned_phone(line), "metadata_region", text)
 
-        if label != "table" and any(anchor in normalized for anchor in ("subtotal", "tax", "vat", "discount", "total")):
-            _extract_totals(payload, lines, text, "paragraph_totals_fallback")
+        if any(anchor in normalized for anchor in ("subtotal", "tax", "vat", "discount", "total")):
+            _extract_totals(payload, lines, text, "totals_region")
 
     contact_block = _best_contact_block(regions)
     if contact_block is not None:
@@ -590,57 +548,38 @@ def _extract_fields_from_regions(regions: list) -> dict:
             _set_field(payload, "Client_Phone", _cleaned_phone(line), "contact_block_fallback", contact_text)
 
     for line, _label in all_lines:
-        _set_field(payload, "Client_Email", _cleaned_email(line), "global_region_scan", line)
+        _set_field(payload, "Client_Email", _cleaned_email(line), "global_scan", line)
         if payload["Client_Email"]["value"]:
             break
 
     for line, _label in all_lines:
-        _set_field(payload, "Client_Phone", _cleaned_phone(line), "global_region_scan", line)
+        _set_field(payload, "Client_Phone", _cleaned_phone(line), "global_scan", line)
         if payload["Client_Phone"]["value"]:
             break
 
     for line, _label in all_lines:
-        _set_field(payload, "Invoice_Number", _invoice_number_from_text(line), "global_region_scan", line)
+        _set_field(payload, "Invoice_Number", _invoice_number_from_text(line), "global_scan", line)
         if payload["Invoice_Number"]["value"]:
             break
 
     for line, _label in all_lines:
         normalized = _normalize(line)
         if "date" in normalized and "due" not in normalized:
-            _set_field(payload, "Invoice_Date", _first_date(line), "global_region_scan", line)
+            _set_field(payload, "Invoice_Date", _first_date(line), "global_scan", line)
         if "due" in normalized:
-            _set_field(payload, "Due_Date", _first_date(line), "global_region_scan", line)
+            _set_field(payload, "Due_Date", _first_date(line), "global_scan", line)
 
     if payload["Issuer_Name"]["value"] is None:
         skip_anchors = (
-            "invoice",
-            "factura",
-            "date",
-            "fecha",
-            "billed to",
-            "bill to",
-            "payable to",
-            "contact info",
-            "payment terms",
-            "invoice to",
-            "customer",
-            "ship to",
-            "shipping",
-            "invoice no",
-            "invoice number",
-            "invoice #",
-            "subtotal",
-            "total",
-            "vat",
-            "tax",
-            "discount",
+            "invoice", "factura", "date", "fecha",
+            "billed to", "bill to", "payable to", "contact info", "payment terms",
+            "invoice to", "customer", "ship to", "shipping",
+            "invoice no", "invoice number", "invoice #",
+            "subtotal", "total", "vat", "tax", "discount",
         )
+        contact_index = contact_block.get("region_index") if contact_block is not None else None
         for region in regions:
-            if region.get("label") != "paragraph":
-                continue
-            region_index = region.get("region_index")
-            contact_index = contact_block.get("region_index") if contact_block is not None else None
-            if contact_index is not None and region_index == contact_index:
+            if region.get("region_index") == contact_index:
                 continue
             region_text = region.get("text", "") or ""
             region_normalized = _normalize(region_text)
@@ -652,9 +591,9 @@ def _extract_fields_from_regions(regions: list) -> dict:
             if region_normalized.startswith("factura") or region_normalized.startswith("fecha"):
                 continue
             name = _extract_name([line.strip() for line in region.get("lines", []) if line.strip()])
-            if name is None or len(name.split()) < 2:
+            if name is None or len(name) < 2:
                 continue
-            _set_field(payload, "Issuer_Name", name, "top_paragraph_fallback", region_text)
+            _set_field(payload, "Issuer_Name", name, "top_region_fallback", region_text)
             break
 
     return payload
@@ -726,59 +665,59 @@ def extract_invoice_fields(storage_key: str, content_type: str) -> ExtractionOut
     """
     Extract structured invoice fields from a document stored in MinIO.
 
-    Uses paragraph/table region detection + Tesseract OCR on each region,
-    followed by anchor-based field extraction.
+    Pipeline: preprocess → full-page Tesseract OCR (for raw_text) → LayoutLM.
+    LayoutLM is the sole extraction method; it uses the original image with its
+    own internal OCR to answer one question per field.
     """
-    model = _load_yolo()
-
     file_bytes = _download_from_minio(storage_key)
     img = _to_image(file_bytes, content_type)
 
-    results = model.predict(img, imgsz=960, conf=0.45, iou=0.35, verbose=False)
+    # Step 1 — preprocess for better Tesseract quality (raw_text only)
+    ocr_img, prep_steps = _preprocess_invoice_image(img)
+    if prep_steps:
+        logger.info("Preprocessing applied: %s", prep_steps)
+    else:
+        logger.debug("Preprocessing skipped (fallback to original image)")
 
-    raw_detections = []
-    for result in results:
-        if result.boxes is None:
-            continue
-        for box in result.boxes:
-            cls_id = int(box.cls.item())
-            raw_detections.append({
-                "label": CLASS_NAMES.get(cls_id, str(cls_id)),
-                "confidence": round(float(box.conf.item()), 4),
-                "xyxy": [round(float(v), 2) for v in box.xyxy[0].tolist()],
-            })
+    # Step 2 — full-page OCR to produce raw_text (not used for field extraction)
+    all_tokens = _ocr_pil_tesseract_tokens(ocr_img)
+    logger.info("Full-page OCR: %d tokens extracted", len(all_tokens))
+    all_lines = _group_lines(all_tokens)
+    raw_text = "\n".join(ln.text for ln in all_lines if ln.text.strip())
 
-    detections = _filter_detections(raw_detections)
-    logger.info("Paragraph YOLO: %d raw → %d kept detections", len(raw_detections), len(detections))
+    # Log OCR text
+    logger.info("OCR output:\n%s", "\n".join(f"  {ln}" for ln in raw_text.splitlines()))
 
-    regions = []
-    for region_index, det in enumerate(detections):
-        x1, y1, x2, y2 = [int(round(v)) for v in det["xyxy"]]
-        x1, y1, x2, y2 = _padded_box(x1, y1, x2, y2, img.width, img.height)
+    # Step 3 — LayoutLM extracts all fields from the original image
+    extracted = _null_payload()
+    layoutlm_results = _extract_with_layoutlm(img)
+    if layoutlm_results:
+        for field, lm_value in layoutlm_results.items():
+            if field in extracted and lm_value:
+                extracted[field] = {"value": lm_value, "method": "layoutlm", "evidence": None}
+        logger.info(
+            "LayoutLM answered %d/%d fields: %s",
+            len(layoutlm_results),
+            len(_FIELD_NAMES),
+            list(layoutlm_results.keys()),
+        )
+    else:
+        logger.warning("LayoutLM returned no results (disabled or failed)")
 
-        crop = img.crop((x1, y1, x2, y2))
-        ocr_lines = _ocr_crop_tesseract(crop)
-
-        region_text = "\n".join(ln.text for ln in ocr_lines if ln.text.strip())
-        region_lines = [ln.text for ln in ocr_lines if ln.text.strip()]
-
-        regions.append({
-            **det,
-            "region_index": region_index,
-            "text": region_text,
-            "lines": region_lines,
-            "line_count": len(region_lines),
-        })
-
-    extracted = _extract_fields_from_regions(regions)
+    # Log final merged fields
+    field_log = []
+    for field, payload in extracted.items():
+        value = payload.get("value")
+        if value is not None:
+            field_log.append(f"  {field:<22} {value!r}  [{payload.get('method', '?')}]")
+        else:
+            field_log.append(f"  {field:<22} —")
+    logger.info("Extracted fields (merged):\n%s", "\n".join(field_log))
 
     def fval(field: str) -> str:
         return extracted.get(field, {}).get("value") or ""
 
     total_text = fval("Total")
-    raw_text = "\n\n".join(
-        f"[{r['label']}]\n{r['text']}" for r in regions if r.get("text")
-    )
 
     return ExtractionOutput(
         invoice_number=fval("Invoice_Number"),

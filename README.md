@@ -2,7 +2,7 @@
 
 **Course:** IA: Statistical Learning and Prediction — IE University
 
-A full-stack web application that classifies scanned documents into 4 categories and extracts structured fields from invoices using traditional ML and computer vision techniques (no generative AI).
+A full-stack web application that classifies scanned documents into 4 categories and extracts structured fields from invoices using a hybrid ML pipeline combining traditional feature engineering, image preprocessing, and transformer-based document understanding.
 
 ---
 
@@ -19,37 +19,44 @@ A full-stack web application that classifies scanned documents into 4 categories
 
 ## ML Pipeline
 
-### Classification (87.5% accuracy)
+### Classification
 
-A hybrid NLP + Computer Vision approach:
+A hybrid NLP + Computer Vision ensemble:
 
-1. **OCR** — Tesseract extracts text from scanned document images
-2. **Text features** — TF-IDF vectorizer (500 features, unigrams + bigrams)
-3. **Image features** — 33 handcrafted features (HOG descriptors, 4×4 text density grid, whitespace ratios, Sobel edge features, margin detection)
-4. **Combined** — 533 features, StandardScaler normalised
-5. **Classifier** — Random Forest (200 trees, GridSearchCV-tuned)
+1. **OCR** — Tesseract extracts text from the document image
+2. **Text cleaning** — removes non-ASCII noise, collapses whitespace, drops single-char tokens
+3. **TF-IDF features** — 500 bigram features (sublinear TF weighting)
+4. **Image features** — 33 handcrafted visual features: HOG descriptors (4 summary stats), 4×4 text density grid, whitespace ratios, Sobel edge density/std, margin measurements
+5. **Text meta-features** — 15 features: character/word/line counts, digit/uppercase/special ratios, keyword hit counts for invoice/email/resume/scientific vocabulary, structural hints (currency symbols, date patterns, `@`)
+6. **Combined vector** — 548 features, StandardScaler normalised
+7. **Ensemble classifier** — soft-voting VotingClassifier (SVM-RBF + Logistic Regression + Random Forest)
 
 Ablation study: hybrid (87.5%) > text-only (82.5%) > image-only (63.8%).
 
-**Stored models:**
-```
-backend/ml/models/classifier.pkl         # trained Random Forest
-backend/ml/models/tfidf_vectorizer.pkl   # fitted TF-IDF vectorizer
-```
-
-### Invoice Field Extraction (~37% field completeness on SROIE test set)
-
-When a document is classified as an invoice, a second pipeline runs automatically to extract structured fields using **YOLOv8** object detection:
-
-1. **Page rendering** — PyMuPDF converts PDFs to images; PNGs/JPEGs loaded directly
-2. **YOLO inference** — fine-tuned YOLOv8 model detects bounding boxes for 15 field classes (trained on SROIE / ICDAR 2019, ~1,000 annotated invoice images)
-3. **Region OCR** — Tesseract reads text from each detected crop
-4. **Post-processing** — date parsing, amount normalisation, currency detection
-5. **Structured output** — invoice number, invoice date, due date, issuer name, recipient name, total amount, currency
-
 **Stored model:**
 ```
-backend/ml/models/yolo_invoice.pt        # YOLOv8 weights (fine-tuned on SROIE)
+backend/ml/models/improved_classifier.pkl   # VotingClassifier + TF-IDF + scaler + label encoder
+```
+
+### Invoice Field Extraction
+
+When a document is classified as an invoice, a second pipeline extracts 16 structured fields:
+
+1. **Page rendering** — PyMuPDF converts PDFs to images at 200 DPI; PNGs/JPEGs loaded directly
+2. **Image preprocessing** — `ai/extraction/preprocessing_invoice/`:
+   - RGB → LAB colour space → L channel (luminance only, colour-independent)
+   - CLAHE (contrast-limited adaptive histogram equalisation, clip=2.0, tile=8×8)
+   - Gaussian background normalisation (σ=51) — divides by blurred background to flatten uneven illumination
+3. **Full-page OCR** — single Tesseract pass on the preprocessed image returns all word tokens with bounding boxes
+4. **LayoutLM extraction** — `impira/layoutlm-document-qa` (LayoutLMv2, fine-tuned for document QA) answers one targeted natural-language question per field using the original image; the model runs its own internal OCR to preserve spatial layout information
+5. **Structured output** — invoice number, invoice date, due date, issuer name, recipient name, billing/shipping address, products, subtotal, VAT, VAT rate, total, discount, discount rate
+
+**Fields extracted:**
+`Invoice_Number`, `Invoice_Date`, `Due_Date`, `Issuer_Name`, `Client_Name`, `Client_Email`, `Client_Phone`, `Billing_Address`, `Shipping_Address`, `Products`, `Subtotal`, `VAT`, `VAT_Rate`, `Total`, `Discount`, `Discount_Rate`
+
+**Model weights** — downloaded automatically on first run and cached in the `huggingface_cache` Docker volume (~1.4 GB, one-time download):
+```
+impira/layoutlm-document-qa   # LayoutLMv2 for document question answering
 ```
 
 **End-to-end flow:**
@@ -58,7 +65,7 @@ Upload → run_classification task → ClassificationResult saved
                                  ↘ if invoice → run_extraction task → InvoiceExtraction saved
 ```
 
-Both tasks run asynchronously in the background worker. The frontend polls until the document status becomes `done`.
+Both tasks run asynchronously in the background worker (`django-q2`). The frontend polls until the document status becomes `done`.
 
 ---
 
@@ -73,7 +80,7 @@ Both tasks run asynchronously in the background worker. The frontend polls until
 | File Storage | MinIO (S3-compatible) via boto3 |
 | Auth | JWT (djangorestframework-simplejwt) |
 | Classification ML | scikit-learn, scikit-image, pytesseract, numpy, scipy |
-| Extraction ML | ultralytics (YOLOv8), PyMuPDF, Pillow, pytesseract |
+| Extraction ML | transformers (LayoutLMv2), PyMuPDF, Pillow, pytesseract, opencv-python |
 | Containerisation | Docker + Docker Compose |
 
 ---
@@ -104,6 +111,7 @@ Both tasks run asynchronously in the background worker. The frontend polls until
 - All uploads go to MinIO; downloads use presigned URLs (300 s TTL)
 - JWT access tokens (15 min) + rotating refresh tokens (7 days)
 - All API responses are envelope-wrapped: `{"data": ...}` for success, `{"error": {...}}` for errors
+- LayoutLM model weights (~1.4 GB) are downloaded from HuggingFace on first run and stored in the `huggingface_cache` named volume — subsequent rebuilds reuse the cache and do not re-download
 
 ---
 
@@ -259,13 +267,17 @@ All endpoints are prefixed `/api/`. Authenticated routes require `Authorization:
 │   │   ├── documents/      # Upload, classify, extract endpoints + async tasks
 │   │   └── users/          # Registration, JWT auth, profiles
 │   ├── ml/
-│   │   ├── classifier.py   # OCR → TF-IDF + image features → Random Forest
-│   │   ├── extractor.py    # paragraph/table YOLO → region OCR → field extraction
-│   │   └── models/         # classifier.pkl, tfidf_vectorizer.pkl, yolo_paragraph.pt
+│   │   ├── classifier.py   # OCR → TF-IDF + image + meta features → VotingClassifier ensemble
+│   │   ├── extractor.py    # preprocess → Tesseract OCR → LayoutLMv2 field extraction
+│   │   └── models/         # improved_classifier.pkl
 │   ├── config/             # Django settings (base / development / production)
 │   └── Dockerfile          # Includes Tesseract, libmagic, ML dependencies
 ├── ai/
-│   └── extraction/         # Training scripts, OCR/YOLO experiments, and extraction docs
+│   ├── classification/     # Classifier training scripts and trained model artefacts
+│   └── extraction/
+│       ├── OCR_method/             # Shared Tesseract OCR helpers (token extraction, line grouping)
+│       ├── preprocessing_invoice/  # Image preprocessing pipeline (LAB-L, CLAHE, background normalisation)
+│       └── layoutlm/               # LayoutLMv2 document-QA wrapper (singleton pipeline, per-field questions)
 ├── frontend/
 │   └── src/
 │       ├── services/       # api.ts, auth.ts, documents.ts — typed backend client

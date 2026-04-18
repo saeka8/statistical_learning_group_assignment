@@ -40,6 +40,7 @@ services:
     volumes:
       - ./backend:/app
       - ./ai:/app/ai
+      - huggingface_cache:/root/.cache/huggingface
     ports:
       - "8000:8000"
     depends_on:
@@ -55,6 +56,7 @@ services:
     volumes:
       - ./backend:/app
       - ./ai:/app/ai
+      - huggingface_cache:/root/.cache/huggingface
     depends_on:
       db:
         condition: service_healthy
@@ -78,3 +80,4 @@ services:
 volumes:
   postgres_data:
   minio_data:
+  huggingface_cache:
