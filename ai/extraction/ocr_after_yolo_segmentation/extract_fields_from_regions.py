@@ -11,7 +11,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from ai.Feature_Extraction_Invoice.OCR_method.extract_invoice_ocr import (  # noqa: E402
+from ai.extraction.purely_ocr.extract_invoice_ocr import (  # noqa: E402
     DATE_RE,
     EMAIL_RE,
     MONEY_RE,

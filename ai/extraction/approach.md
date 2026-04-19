@@ -140,37 +140,37 @@ Each row defines:
 
 We added a visualization script:
 
-- `ai/extraction/Dataset_verification/visualize_labels.py`
+- `ai/extraction/dataset_verification/visualize_labels.py`
 
 This can be used to inspect how fields are labeled on the invoices before training.
 
 Example:
 
 ```bash
-python3 ai/extraction/Dataset_verification/visualize_labels.py --sample 5
-python3 ai/extraction/Dataset_verification/visualize_labels.py --image 671_png_jpg.rf.p73UNqF5SQDjw12vTAI6.jpg --open
+python3 ai/extraction/dataset_verification/visualize_labels.py --sample 5
+python3 ai/extraction/dataset_verification/visualize_labels.py --image 671_png_jpg.rf.p73UNqF5SQDjw12vTAI6.jpg --open
 ```
 
 ## Method Files
 
 The project is currently organized into method-specific folders:
 
-- `ai/extraction/YOLO_method/`
-- `ai/extraction/paragraph_yolo/`
-- `ai/extraction/OCR_method/`
-- `ai/extraction/Dataset_verification/`
+- `ai/extraction/precise_yolo/`
+- `ai/extraction/ocr_after_yolo_segmentation/`
+- `ai/extraction/purely_ocr/`
+- `ai/extraction/dataset_verification/`
 
 Main entry points:
 
-- `YOLO_method/train_yolo.py`
-- `YOLO_method/run_overnight_yolo.sh`
-- `YOLO_method/predict_invoice_yolo.py`
-- `paragraph_yolo/train_paragraph_yolo.py`
-- `paragraph_yolo/data.yaml`
-- `OCR_method/extract_invoice_ocr.py`
-- `OCR_method/OCR_FALLBACK.md`
-- `OCR_method/requirements_ocr.txt`
-- `Dataset_verification/visualize_labels.py`
+- `precise_yolo/train_yolo.py`
+- `precise_yolo/run_overnight_yolo.sh`
+- `precise_yolo/predict_invoice_yolo.py`
+- `ocr_after_yolo_segmentation/train_paragraph_yolo.py`
+- `ocr_after_yolo_segmentation/data.yaml`
+- `purely_ocr/extract_invoice_ocr.py`
+- `purely_ocr/ocr_fallback.md`
+- `purely_ocr/requirements_ocr.txt`
+- `dataset_verification/visualize_labels.py`
 
 ## Planned Pipeline
 
@@ -199,7 +199,7 @@ Expected output of stage 1:
 
 Current alternative detector:
 
-- `ai/extraction/paragraph_yolo/`
+- `ai/extraction/ocr_after_yolo_segmentation/`
 
 This dataset uses two classes:
 
@@ -215,7 +215,7 @@ Its training script:
 Main command:
 
 ```bash
-python3 ai/extraction/paragraph_yolo/train_paragraph_yolo.py --epochs 20 --imgsz 960 --batch 4 --device mps --name paragraph_table
+python3 ai/extraction/ocr_after_yolo_segmentation/train_paragraph_yolo.py --epochs 20 --imgsz 960 --batch 4 --device mps --name paragraph_table
 ```
 
 ### Stage 2. OCR on Detected Regions
@@ -309,9 +309,9 @@ Even if performance is lower than the other tracks on our small dataset, the com
 
 Implementation files:
 
-- `Donut/donut_invoice_extraction.ipynb`
-- `Donut/requirements.txt`
-- `Donut/README.md`
+- `donut/donut_invoice_extraction.ipynb`
+- `donut/requirements.txt`
+- `donut/README.md`
 
 ## Why Not OCR + Transformer Only
 
@@ -337,7 +337,7 @@ If needed later, a language model can still be added as a refinement stage, but 
 
 We also implemented a rule-based OCR-first fallback:
 
-- `ai/extraction/OCR_method/extract_invoice_ocr.py`
+- `ai/extraction/purely_ocr/extract_invoice_ocr.py`
 
 This fallback:
 
@@ -356,7 +356,7 @@ This path is especially useful when:
 
 We added a second YOLO-based detection strategy under:
 
-- `ai/extraction/paragraph_yolo/`
+- `ai/extraction/ocr_after_yolo_segmentation/`
 
 The idea is:
 
@@ -408,7 +408,7 @@ For the paragraph/table track, evaluation should also check:
 
 ## Practical Project Plan
 
-1. Verify annotations visually with `ai/extraction/Dataset_verification/visualize_labels.py`
+1. Verify annotations visually with `ai/extraction/dataset_verification/visualize_labels.py`
 2. Train either the field-level detector or the paragraph/table detector
 3. Run inference on unseen invoices
 4. Crop detected fields or regions and apply OCR

@@ -93,7 +93,7 @@ This keeps fine-tuning feasible on a small dataset while still producing a meani
 ### 1. Install dependencies
 
 ```bash
-pip install -r ai/extraction/Donut/requirements.txt
+pip install -r ai/extraction/donut/requirements.txt
 ```
 
 > A CUDA-capable GPU is strongly recommended. Fine-tuning on CPU is very slow.
@@ -128,7 +128,7 @@ The notebook includes a helper cell to generate this JSON from your existing CSV
 ### 3. Open and run the notebook
 
 ```bash
-jupyter notebook ai/extraction/Donut/donut_invoice_extraction.ipynb
+jupyter notebook ai/extraction/donut/donut_invoice_extraction.ipynb
 ```
 
 Run all cells in order. The notebook is divided into clearly labelled sections:

@@ -6,10 +6,10 @@ invoice image, groups OCR tokens into lines, then extracts structured fields
 using anchor-based rules and regex fallbacks.
 
 Examples:
-  python3 ai/extraction/OCR_method/extract_invoice_ocr.py --image path/to/invoice.jpg
-  python3 ai/extraction/OCR_method/extract_invoice_ocr.py --image path/to/invoice.jpg --engine easyocr --pretty
-  python3 ai/extraction/OCR_method/extract_invoice_ocr.py --image path/to/invoice.jpg --dump-ocr ocr.json
-  python3 ai/extraction/OCR_method/extract_invoice_ocr.py --image path/to/invoice.jpg --preprocess --pretty
+  python3 ai/extraction/purely_ocr/extract_invoice_ocr.py --image path/to/invoice.jpg
+  python3 ai/extraction/purely_ocr/extract_invoice_ocr.py --image path/to/invoice.jpg --engine easyocr --pretty
+  python3 ai/extraction/purely_ocr/extract_invoice_ocr.py --image path/to/invoice.jpg --dump-ocr ocr.json
+  python3 ai/extraction/purely_ocr/extract_invoice_ocr.py --image path/to/invoice.jpg --preprocess --pretty
 """
 
 from __future__ import annotations

@@ -8,14 +8,14 @@ A full-stack web application that classifies scanned documents into 4 categories
 
 ## Document Categories
 
-| Category | Dataset Source | Training Samples | Validation Samples |
-|---|---|---|---|
-| Invoice | RVL-CDIP | 2,000 | 500 |
-| Email | RVL-CDIP | 2,000 | 500 |
-| Resume | RVL-CDIP | 2,000 | 500 |
-| Scientific Publication | RVL-CDIP | 2,000 | 500 |
+| Category | Dataset Source | Samples per class |
+|---|---|---|
+| Invoice | RVL-CDIP (small-200) | ~200 (pre-split train/validation) |
+| Email | RVL-CDIP (small-200) | ~200 (pre-split train/validation) |
+| Resume | RVL-CDIP (small-200) | ~200 (pre-split train/validation) |
+| Scientific Publication | RVL-CDIP (small-200) | ~200 (pre-split train/validation) |
 
-Data is streamed directly from HuggingFace (`chainyo/rvl-cdip`) — no manual dataset preparation required.
+Data is streamed directly from HuggingFace (`vaclavpechtor/rvl_cdip-small-200`) — no manual dataset preparation required.
 
 ---
 
@@ -31,7 +31,7 @@ A hybrid NLP + Computer Vision ensemble:
 4. **Image features** — 33 handcrafted visual features: HOG descriptors (4 summary stats), 4×4 text density grid, whitespace ratios, Sobel edge density/std, margin measurements
 5. **Text meta-features** — 15 features: character/word/line counts, digit/uppercase/special ratios, keyword hit counts for invoice/email/resume/scientific vocabulary, structural hints (currency symbols, date patterns, `@`)
 6. **Combined vector** — 798 features, StandardScaler normalised
-7. **Ensemble classifier** — soft-voting VotingClassifier (SVM-RBF + Logistic Regression + Random Forest), 93.8% accuracy on the 2,000-sample held-out validation set
+7. **Ensemble classifier** — soft-voting VotingClassifier (SVM-RBF + Logistic Regression + Random Forest), 93.8% accuracy on the RVL-CDIP small-200 held-out validation split
 
 Ablation study: hybrid (93.8%) > text-only bigrams + meta (88.4%) > text-only unigrams (82.5%) > image-only (63.8%).
 

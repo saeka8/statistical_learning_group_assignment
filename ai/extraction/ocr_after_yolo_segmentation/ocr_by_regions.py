@@ -11,7 +11,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from ai.Feature_Extraction_Invoice.OCR_method.extract_invoice_ocr import (
+from ai.extraction.purely_ocr.extract_invoice_ocr import (
     OCRLine,
     filter_tokens,
     group_lines,
@@ -19,7 +19,7 @@ from ai.Feature_Extraction_Invoice.OCR_method.extract_invoice_ocr import (
     run_paddleocr,
     run_tesseract,
 )
-from ai.Feature_Extraction_Invoice.paragraph_yolo.extract_fields_from_regions import (
+from ai.extraction.ocr_after_yolo_segmentation.extract_fields_from_regions import (
     extract_fields_from_region_payload,
 )
 
