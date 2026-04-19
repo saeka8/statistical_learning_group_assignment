@@ -1,4 +1,3 @@
-import { Button } from '../common/Button';
 import { Badge } from '../common/Badge';
 import { Card } from '../common/Card';
 import { ConfidenceBar } from '../common/ConfidenceBar';
@@ -10,10 +9,6 @@ import styles from './WorkspaceDetailsPanel.module.css';
 interface WorkspaceDetailsPanelProps {
   document: DocumentResult | null;
   isLoading: boolean;
-  actionLoading: 'download' | 'rerun' | 'delete' | null;
-  onDownload: () => void;
-  onRerunAnalysis: () => void;
-  onDelete: () => void;
 }
 
 function formatLabel(value?: string | null): string {
@@ -35,10 +30,6 @@ function formatDate(value: string): string {
 export function WorkspaceDetailsPanel({
   document,
   isLoading,
-  actionLoading,
-  onDownload,
-  onRerunAnalysis,
-  onDelete,
 }: WorkspaceDetailsPanelProps) {
   return (
     <SectionReveal direction="right">
@@ -75,35 +66,6 @@ export function WorkspaceDetailsPanel({
                 <Badge label={formatLabel(document.label)} variant="accent" />
               </div>
 
-              <div className={styles.actions}>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="primary"
-                  onClick={onDownload}
-                  loading={actionLoading === 'download'}
-                >
-                  Download
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={onRerunAnalysis}
-                  loading={actionLoading === 'rerun'}
-                >
-                  Re-run analysis
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="ghost"
-                  onClick={onDelete}
-                  loading={actionLoading === 'delete'}
-                >
-                  Delete
-                </Button>
-              </div>
 
               <div className={styles.metaGrid}>
                 <div className={styles.metaBlock}>
