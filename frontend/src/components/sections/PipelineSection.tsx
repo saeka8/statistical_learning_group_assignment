@@ -52,8 +52,9 @@ export function PipelineSection() {
 
               <Card variant="glass" padding="md" className={styles.disclaimerCard}>
                 <p className={styles.disclaimerText}>
-                  Traditional ML only: OCR, handcrafted features, ensemble classification, and
-                  regex-assisted entity extraction. No generative models are used in the workflow.
+                  Hybrid pipeline: OCR, handcrafted features, and a classical voting ensemble for
+                  classification; image preprocessing plus LayoutLM document-QA for invoice extraction.
+                  No generative models are used in the workflow.
                 </p>
               </Card>
             </div>

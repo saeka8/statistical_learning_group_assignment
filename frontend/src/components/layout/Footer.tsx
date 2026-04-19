@@ -29,7 +29,7 @@ export function Footer() {
             </div>
             <div className={styles.meta}>
               <span className={styles.metaLabel}>Methods</span>
-              <span className={styles.metaValue}>OCR, TF-IDF, classical ML, regex-assisted NER</span>
+              <span className={styles.metaValue}>OCR, TF-IDF, voting ensemble, LayoutLM document-QA</span>
             </div>
             <div className={styles.meta}>
               <span className={styles.metaLabel}>Purpose</span>

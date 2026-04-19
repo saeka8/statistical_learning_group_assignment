@@ -59,7 +59,10 @@ def run_classification(document_id: str) -> None:
 
 def run_extraction(document_id: str) -> None:
     """
-    Async task: extract structured fields from an invoice using YOLO + OCR.
+    Async task: extract structured fields from an invoice using LayoutLM document-QA.
+
+    Pipeline: image preprocessing (CLAHE) -> full-page Tesseract OCR for raw_text ->
+    LayoutLMv2 answers one targeted question per field.
 
     Automatically enqueued by run_classification when predicted_label == 'invoice'.
     Can also be triggered manually via POST /api/documents/{id}/classify/

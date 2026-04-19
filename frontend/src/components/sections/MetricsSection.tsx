@@ -41,7 +41,7 @@ export function MetricsSection() {
                     <AnimatedCounter
                       target={metric.value}
                       suffix={metric.suffix}
-                      decimals={metric.suffix === 'ms' ? 0 : 1}
+                      decimals={Number.isInteger(metric.value) ? 0 : 1}
                     />
                   ) : (
                     `0${metric.suffix}`
@@ -61,18 +61,18 @@ export function MetricsSection() {
             </div>
             <div className={styles.miniDivider} aria-hidden="true" />
             <div className={styles.miniStat}>
-              <span className={styles.miniValue}>400</span>
+              <span className={styles.miniValue}>8,000</span>
               <span className={styles.miniLabel}>Training Samples</span>
             </div>
             <div className={styles.miniDivider} aria-hidden="true" />
             <div className={styles.miniStat}>
-              <span className={styles.miniValue}>533</span>
+              <span className={styles.miniValue}>798</span>
               <span className={styles.miniLabel}>Hybrid Features</span>
             </div>
             <div className={styles.miniDivider} aria-hidden="true" />
             <div className={styles.miniStat}>
-              <span className={styles.miniValue}>GridSearchCV</span>
-              <span className={styles.miniLabel}>Hyperparameter Tuning</span>
+              <span className={styles.miniValue}>Soft-Voting</span>
+              <span className={styles.miniLabel}>SVM + LR + RF Ensemble</span>
             </div>
           </div>
         </SectionReveal>

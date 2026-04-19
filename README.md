@@ -8,12 +8,14 @@ A full-stack web application that classifies scanned documents into 4 categories
 
 ## Document Categories
 
-| Category | Dataset Source | Training Samples |
-|---|---|---|
-| Invoice | RVL-CDIP + SROIE | 100 |
-| Email | RVL-CDIP | 100 |
-| Resume | RVL-CDIP | 100 |
-| Scientific Publication | RVL-CDIP | 100 |
+| Category | Dataset Source | Training Samples | Validation Samples |
+|---|---|---|---|
+| Invoice | RVL-CDIP | 2,000 | 500 |
+| Email | RVL-CDIP | 2,000 | 500 |
+| Resume | RVL-CDIP | 2,000 | 500 |
+| Scientific Publication | RVL-CDIP | 2,000 | 500 |
+
+Data is streamed directly from HuggingFace (`chainyo/rvl-cdip`) — no manual dataset preparation required.
 
 ---
 
@@ -25,13 +27,13 @@ A hybrid NLP + Computer Vision ensemble:
 
 1. **OCR** — Tesseract extracts text from the document image
 2. **Text cleaning** — removes non-ASCII noise, collapses whitespace, drops single-char tokens
-3. **TF-IDF features** — 500 bigram features (sublinear TF weighting)
+3. **TF-IDF features** — 750 bigram features (sublinear TF weighting)
 4. **Image features** — 33 handcrafted visual features: HOG descriptors (4 summary stats), 4×4 text density grid, whitespace ratios, Sobel edge density/std, margin measurements
 5. **Text meta-features** — 15 features: character/word/line counts, digit/uppercase/special ratios, keyword hit counts for invoice/email/resume/scientific vocabulary, structural hints (currency symbols, date patterns, `@`)
-6. **Combined vector** — 548 features, StandardScaler normalised
-7. **Ensemble classifier** — soft-voting VotingClassifier (SVM-RBF + Logistic Regression + Random Forest)
+6. **Combined vector** — 798 features, StandardScaler normalised
+7. **Ensemble classifier** — soft-voting VotingClassifier (SVM-RBF + Logistic Regression + Random Forest), 93.8% accuracy on the 2,000-sample held-out validation set
 
-Ablation study: hybrid (87.5%) > text-only (82.5%) > image-only (63.8%).
+Ablation study: hybrid (93.8%) > text-only bigrams + meta (88.4%) > text-only unigrams (82.5%) > image-only (63.8%).
 
 **Stored model:**
 ```
@@ -102,9 +104,9 @@ Both tasks run asynchronously in the background worker (`django-q2`). The fronte
                               ▼                   ▼                  ▼
                     ┌──────────────┐   ┌──────────────────┐  ┌──────────────┐
                     │  PostgreSQL  │   │  MinIO (S3)      │  │  ML Models   │
-                    │  (metadata   │   │  (file storage)  │  │  pkl + .pt   │
-                    │   + task Q)  │   └──────────────────┘  └──────────────┘
-                    └──────────────┘
+                    │  (metadata   │   │  (file storage)  │  │  pkl + HF    │
+                    │   + task Q)  │   └──────────────────┘  │  transformer │
+                    └──────────────┘                         └──────────────┘
 ```
 
 - Django Q2 uses PostgreSQL as its message broker — no Redis required
@@ -275,7 +277,7 @@ All endpoints are prefixed `/api/`. Authenticated routes require `Authorization:
 ├── ai/
 │   ├── classification/     # Classifier training scripts and trained model artefacts
 │   └── extraction/
-│       ├── OCR_method/             # Shared Tesseract OCR helpers (token extraction, line grouping)
+│       ├── purely_ocr/             # Shared Tesseract OCR helpers (token extraction, line grouping)
 │       ├── preprocessing_invoice/  # Image preprocessing pipeline (LAB-L, CLAHE, background normalisation)
 │       └── layoutlm/               # LayoutLMv2 document-QA wrapper (singleton pipeline, per-field questions)
 ├── frontend/

@@ -43,9 +43,9 @@ const phaseMessages: Record<AnalysisPhase, string> = {
   idle: 'Ready for a live document run',
   uploading: 'Uploading documents...',
   preprocessing: 'Preprocessing and OCR...',
-  extracting_features: 'Extracting features (TF-IDF, layout)...',
+  extracting_features: 'Extracting features (TF-IDF bigrams, layout, meta)...',
   classifying: 'Running ensemble classifier...',
-  extracting_invoice: 'Extracting invoice fields (NER, regex)...',
+  extracting_invoice: 'Extracting invoice fields (LayoutLM document-QA)...',
   complete: 'Analysis complete',
   error: 'Review the document and try again',
 };
@@ -62,9 +62,9 @@ const phaseProgress: Record<AnalysisPhase, string> = {
 };
 
 const workflowSignals = [
-  { label: 'OCR prep', value: 'Deskew + clean' },
-  { label: 'Label space', value: '6 classes' },
-  { label: 'Invoice route', value: 'NER + regex' },
+  { label: 'OCR prep', value: 'CLAHE + normalize' },
+  { label: 'Label space', value: '4 classes' },
+  { label: 'Invoice route', value: 'LayoutLM QA' },
 ];
 
 export function UploadWorkspace({

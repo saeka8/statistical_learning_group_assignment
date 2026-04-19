@@ -34,7 +34,7 @@ _APP_ROOT = os.path.dirname(ML_DIR)
 if _APP_ROOT not in _sys.path:
     _sys.path.insert(0, _APP_ROOT)
 
-from ai.extraction.OCR_method.shared_ocr import (
+from ai.extraction.purely_ocr.shared_ocr import (
     ocr_pil_tesseract_tokens as _ocr_pil_tesseract_tokens,
     group_lines as _group_lines,
 )
@@ -674,51 +674,52 @@ def extract_invoice_fields(storage_key: str, content_type: str) -> ExtractionOut
     file_bytes = _download_from_minio(storage_key)
     img = _to_image(file_bytes, content_type)
 
-    results = model.predict(img, imgsz=960, conf=0.45, iou=0.35, verbose=False)
+    # Step 1 — preprocess for better Tesseract quality (raw_text only)
+    ocr_img, prep_steps = _preprocess_invoice_image(img)
+    if prep_steps:
+        logger.info("Preprocessing applied: %s", prep_steps)
+    else:
+        logger.debug("Preprocessing skipped (fallback to original image)")
 
-    raw_detections = []
-    for result in results:
-        if result.boxes is None:
-            continue
-        for box in result.boxes:
-            cls_id = int(box.cls.item())
-            raw_detections.append({
-                "label": CLASS_NAMES.get(cls_id, str(cls_id)),
-                "confidence": round(float(box.conf.item()), 4),
-                "xyxy": [round(float(v), 2) for v in box.xyxy[0].tolist()],
-            })
+    # Step 2 — full-page OCR to produce raw_text (not used for field extraction)
+    all_tokens = _ocr_pil_tesseract_tokens(ocr_img)
+    logger.info("Full-page OCR: %d tokens extracted", len(all_tokens))
+    all_lines = _group_lines(all_tokens)
+    raw_text = "\n".join(ln.text for ln in all_lines if ln.text.strip())
 
-    detections = _filter_detections(raw_detections)
-    logger.info("Paragraph YOLO: %d raw → %d kept detections", len(raw_detections), len(detections))
+    # Log OCR text
+    logger.info("OCR output:\n%s", "\n".join(f"  {ln}" for ln in raw_text.splitlines()))
 
-    regions = []
-    for region_index, det in enumerate(detections):
-        x1, y1, x2, y2 = [int(round(v)) for v in det["xyxy"]]
-        x1, y1, x2, y2 = _padded_box(x1, y1, x2, y2, img.width, img.height)
+    # Step 3 — LayoutLM extracts all fields from the original image
+    extracted = _null_payload()
+    layoutlm_results = _extract_with_layoutlm(img)
+    if layoutlm_results:
+        for field, lm_value in layoutlm_results.items():
+            if field in extracted and lm_value:
+                extracted[field] = {"value": lm_value, "method": "layoutlm", "evidence": None}
+        logger.info(
+            "LayoutLM answered %d/%d fields: %s",
+            len(layoutlm_results),
+            len(_FIELD_NAMES),
+            list(layoutlm_results.keys()),
+        )
+    else:
+        logger.warning("LayoutLM returned no results (disabled or failed)")
 
-        crop = img.crop((x1, y1, x2, y2))
-        ocr_lines = _ocr_crop_tesseract(crop)
-
-        region_text = "\n".join(ln.text for ln in ocr_lines if ln.text.strip())
-        region_lines = [ln.text for ln in ocr_lines if ln.text.strip()]
-
-        regions.append({
-            **det,
-            "region_index": region_index,
-            "text": region_text,
-            "lines": region_lines,
-            "line_count": len(region_lines),
-        })
-
-    extracted = _extract_fields_from_regions(regions)
+    # Log final merged fields
+    field_log = []
+    for field, payload in extracted.items():
+        value = payload.get("value")
+        if value is not None:
+            field_log.append(f"  {field:<22} {value!r}  [{payload.get('method', '?')}]")
+        else:
+            field_log.append(f"  {field:<22} —")
+    logger.info("Extracted fields (merged):\n%s", "\n".join(field_log))
 
     def fval(field: str) -> str:
         return extracted.get(field, {}).get("value") or ""
 
     total_text = fval("Total")
-    raw_text = "\n\n".join(
-        f"[{r['label']}]\n{r['text']}" for r in regions if r.get("text")
-    )
 
     return ExtractionOutput(
         invoice_number=fval("Invoice_Number"),
