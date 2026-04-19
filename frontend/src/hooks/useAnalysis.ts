@@ -7,8 +7,7 @@ import type {
 } from '../types';
 import { sampleDocuments, type SampleDocument } from '../data/sampleData';
 import { delay, generateId } from '../utils/helpers';
-import { isAuthenticated } from '../services/api';
-import { uploadDocument, pollDocument, deleteDocument } from '../services/documents';
+import { deleteDocument } from '../services/documents';
 import { getUserFacingError } from '../services/errorMessages';
 
 interface UseAnalysisReturn {
@@ -166,89 +165,11 @@ export function useAnalysis(): UseAnalysisReturn {
     [simulateAnalysis, updateDoc]
   );
 
-  // ── Real API analysis (authenticated, real files) ───────────────────────────
-
-  const runApiAnalysis = useCallback(
-    async (realDocs: UploadedDocument[]) => {
-      // 1. Upload all files
-      const uploadResults: Array<{ localId: string; backendId: string }> = [];
-
-      for (const doc of realDocs) {
-        if (doc.status !== 'idle' || !doc.file) continue;
-
-        updateDoc(doc.id, { status: 'uploading', progress: 0 });
-        try {
-          // Simulate upload progress while the fetch is in-flight
-          let fakeProgress = 0;
-          const progressInterval = setInterval(() => {
-            fakeProgress = Math.min(fakeProgress + 15, 85);
-            updateDoc(doc.id, { progress: fakeProgress });
-          }, 200);
-
-          const result = await uploadDocument(doc.file);
-          clearInterval(progressInterval);
-
-          updateDoc(doc.id, {
-            backendId: result.backendId,
-            status: 'processing',
-            progress: 100,
-          });
-          uploadResults.push({ localId: doc.id, backendId: result.backendId });
-        } catch (err) {
-          updateDoc(doc.id, {
-            status: 'error',
-            error: getUserFacingError(err, 'upload', 'Upload failed.'),
-          });
-        }
-      }
-
-      if (uploadResults.length === 0) return;
-
-      // 2. Poll all uploaded documents concurrently
-      setPhase('classifying');
-
-      await Promise.all(
-        uploadResults.map(({ localId, backendId }) =>
-          pollDocument(
-            backendId,
-            (update) => {
-              // Stream intermediate classification results as they arrive
-              const partial: Partial<UploadedDocument> = {};
-              if (update.classification) partial.classification = update.classification;
-              if (Object.keys(partial).length > 0) updateDoc(localId, partial);
-            }
-          )
-            .then((final) => {
-              const isInvoice =
-                final.classification?.predictedCategory === 'invoice' && !!final.extraction;
-
-              updateDoc(localId, {
-                status: final.status === 'done' ? (isInvoice ? 'extracted' : 'classified') : 'error',
-                classification: final.classification,
-                extraction: final.extraction,
-                error:
-                  final.status === 'error'
-                    ? getUserFacingError(
-                        new Error('Analysis failed on the server.'),
-                        'analysis',
-                        'Analysis failed on the server.'
-                      )
-                    : undefined,
-              });
-            })
-            .catch((err) => {
-              updateDoc(localId, {
-                status: 'error',
-                error: getUserFacingError(err, 'analysis', 'Analysis failed.'),
-              });
-            })
-        )
-      );
-    },
-    [updateDoc]
-  );
-
   // ── analyzeAll ───────────────────────────────────────────────────────────────
+  //
+  // The landing page is demo-only: every upload runs through the mock analysis
+  // path regardless of auth state. Real backend processing happens only on the
+  // authenticated /workspace route (via the `useWorkspace` hook).
 
   const analyzeAll = useCallback(async () => {
     const idle = documents.filter((d) => d.status === 'idle');
@@ -274,27 +195,14 @@ export function useAnalysis(): UseAnalysisReturn {
       return;
     }
 
-    const realDocs = actionableDocs.filter((d) => d.file !== null);
-    const mockDocs = actionableDocs.filter((d) => d.file === null);
-
-    // Run both in sequence: real first, then mock (they can coexist in the queue)
-    if (realDocs.length > 0 && isAuthenticated()) {
-      await runApiAnalysis(realDocs);
-    } else if (realDocs.length > 0) {
-      // Not authenticated — fall back to simulation for real files too
-      await runMockAnalysis(realDocs);
-    }
-
-    if (mockDocs.length > 0) {
-      await runMockAnalysis(mockDocs);
-    }
+    await runMockAnalysis(actionableDocs);
 
     setPhase('complete');
     setActiveDocumentId((curr) => {
       if (curr && documents.some((d) => d.id === curr)) return curr;
       return documents[0]?.id ?? null;
     });
-  }, [documents, runApiAnalysis, runMockAnalysis]);
+  }, [documents, runMockAnalysis, updateDoc]);
 
   const reset = useCallback(() => {
     setDocuments([]);

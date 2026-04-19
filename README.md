@@ -42,7 +42,7 @@ backend/ml/models/improved_classifier.pkl   # VotingClassifier + TF-IDF + scaler
 
 ### Invoice Field Extraction
 
-When a document is classified as an invoice, a second pipeline extracts 16 structured fields:
+When a document is classified as an invoice, a second pipeline extracts six structured fields — the minimum required by the assignment brief:
 
 1. **Page rendering** — PyMuPDF converts PDFs to images at 200 DPI; PNGs/JPEGs loaded directly
 2. **Image preprocessing** — `ai/extraction/preprocessing_invoice/`:
@@ -51,10 +51,10 @@ When a document is classified as an invoice, a second pipeline extracts 16 struc
    - Gaussian background normalisation (σ=51) — divides by blurred background to flatten uneven illumination
 3. **Full-page OCR** — single Tesseract pass on the preprocessed image returns all word tokens with bounding boxes
 4. **LayoutLM extraction** — `impira/layoutlm-document-qa` (LayoutLMv2, fine-tuned for document QA) answers one targeted natural-language question per field using the original image; the model runs its own internal OCR to preserve spatial layout information
-5. **Structured output** — invoice number, invoice date, due date, issuer name, recipient name, billing/shipping address, products, subtotal, VAT, VAT rate, total, discount, discount rate
+5. **Structured output** — invoice number, invoice date, due date, issuer name, recipient name, total amount (with inferred currency)
 
 **Fields extracted:**
-`Invoice_Number`, `Invoice_Date`, `Due_Date`, `Issuer_Name`, `Client_Name`, `Client_Email`, `Client_Phone`, `Billing_Address`, `Shipping_Address`, `Products`, `Subtotal`, `VAT`, `VAT_Rate`, `Total`, `Discount`, `Discount_Rate`
+`Invoice_Number`, `Invoice_Date`, `Due_Date`, `Issuer_Name`, `Recipient_Name`, `Total_Amount`
 
 **Model weights** — downloaded automatically on first run and cached in the `huggingface_cache` Docker volume (~1.4 GB, one-time download):
 ```

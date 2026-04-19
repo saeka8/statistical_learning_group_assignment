@@ -88,8 +88,8 @@ project-root/
 │   │   └── extraction/         # Invoice information extraction
 │   │
 │   └── ml/                     # ML pipeline (no Django dependency)
-│       ├── classifier.py       # Document classifier (SVM / Random Forest)
-│       ├── extractor.py        # Invoice field extractor (regex + NER)
+│       ├── classifier.py       # Document classifier (soft-voting ensemble: SVM-RBF + LR + RF)
+│       ├── extractor.py        # Invoice field extractor (preprocessing + LayoutLMv2 document-QA)
 │       ├── ocr.py              # Tesseract wrapper
 │       ├── preprocessor.py     # Text cleaning, feature engineering
 │       └── models/             # Serialized trained models (.pkl)
@@ -708,36 +708,40 @@ The ML pipeline lives in `backend/ml/` — pure Python, no Django imports — so
 raw file (downloaded from MinIO)
   └→ OCR (if image/scanned PDF) via pytesseract
   └→ Text extraction (if native PDF) via pdfminer.six
-  └→ TF-IDF text features (500 features, unigrams + bigrams)
-  └→ Handcrafted image features (33 features: HOG, text density, edges, margins)
-  └→ Combined hybrid feature vector (533 features)
+  └→ OCR text cleaning (non-ASCII removal, whitespace collapse, short-token filter)
+  └→ TF-IDF text features (750 bigram features, sublinear TF weighting)
+  └→ Handcrafted image features (33 features: HOG, 4×4 text density grid, whitespace, Sobel edges, margins)
+  └→ Text meta-features (15 features: counts, ratios, keyword hits, structural flags)
+  └→ Combined hybrid feature vector (798 features: 750 + 33 + 15)
   └→ StandardScaler normalization
-  └→ Random Forest classifier (200 trees, GridSearchCV-tuned)
+  └→ Soft-voting ensemble classifier (SVM-RBF + Logistic Regression + Random Forest)
   └→ (label, confidence, all_scores)
   └→ Save ClassificationResult to DB
   └→ If label == "invoice": enqueue extraction task
 ```
 
-Trained on 400 documents (100 per category) from the RVL-CDIP dataset.
-Achieves **87.5% accuracy** on held-out test data. Ablation study shows
-hybrid (NLP + CV) outperforms text-only (82.5%) and image-only (63.8%).
+Trained on approximately 200 samples per class from the `vaclavpechtor/rvl_cdip-small-200`
+HuggingFace dataset. Achieves **93.8% accuracy** on the held-out validation split.
+Ablation study shows hybrid (93.8%) > text-only bigrams + meta (88.4%) >
+text-only unigrams (82.5%) > image-only (63.8%).
 
 ### Extraction pipeline (`ml/extractor.py`)
 
 ```
 raw file (downloaded from MinIO)
-  └→ OCR text extraction via pytesseract
-  └→ Cascading regex patterns (6 passes for totals, multi-format dates)
-  └→ Company name detection via suffix matching + positional heuristics
-  └→ Currency detection via symbol/code regex (USD, EUR, GBP, etc.)
-  └→ Heuristic confidence scoring → confidence_map per field
-  └→ Save InvoiceExtraction to DB (with raw_text and confidence_map)
+  └→ Page rendering (PyMuPDF for PDFs at 200 DPI, direct load for images)
+  └→ Image preprocessing (LAB-L channel → CLAHE → Gaussian background normalization)
+  └→ Full-page OCR via pytesseract (for raw_text logging only)
+  └→ LayoutLMv2 document-QA (impira/layoutlm-document-qa) — one targeted question per field
+  └→ Date parsing (8 formats), amount normalization, currency inference (EUR/USD/GBP)
+  └→ Save InvoiceExtraction to DB (6 fields, currency, confidence_map, raw_text)
   └→ Update Document.status = "done"
 ```
 
-Tested on the SROIE dataset (626 annotated invoice images). Extraction
-accuracy is bounded by OCR quality — ground-truth totals only appear in
-~53% of OCR outputs, giving a theoretical effective ceiling of ~69%.
+LayoutLMv2 is a discriminative span-selection transformer — it selects existing
+spans from the document rather than generating new tokens, which keeps the pipeline
+consistent with the no-generative-AI constraint. Extraction is evaluated
+qualitatively on unseen invoices.
 
 ### Model versioning
 

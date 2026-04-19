@@ -60,24 +60,17 @@ def _load_pipeline():
 # ---------------------------------------------------------------------------
 
 # Map from our canonical field name → list of questions to try (in order).
-# We ask only the first question; the list allows fallback phrasing.
+# We ask only the first question that returns a confident answer; the list
+# allows fallback phrasing. Only the six fields required by the assignment
+# brief are queried — these are the fields persisted in the `InvoiceExtraction`
+# model and shown in the frontend.
 _FIELD_QUESTIONS: dict[str, list[str]] = {
-    "Invoice_Number":   ["What is the invoice number?", "What is the invoice #?"],
-    "Invoice_Date":     ["What is the invoice date?", "What is the date of the invoice?"],
-    "Due_Date":         ["What is the due date?", "What is the payment due date?"],
-    "Issuer_Name":      ["What is the name of the company issuing this invoice?", "Who issued this invoice?"],
-    "Client_Name":      ["What is the name of the client or customer?", "Who is billed?"],
-    "Client_Email":     ["What is the client email address?"],
-    "Client_Phone":     ["What is the client phone number?"],
-    "Billing_Address":  ["What is the billing address?"],
-    "Shipping_Address": ["What is the shipping or delivery address?"],
-    "Subtotal":         ["What is the subtotal amount?"],
-    "VAT":              ["What is the VAT or tax amount?"],
-    "VAT_Rate":         ["What is the VAT rate or tax rate?"],
-    "Total":            ["What is the total amount due?", "What is the total?"],
-    "Discount":         ["What is the discount amount?"],
-    "Discount_Rate":    ["What is the discount rate?"],
-    "Products":         ["What are the products or items listed on the invoice?"],
+    "Invoice_Number": ["What is the invoice number?", "What is the invoice #?"],
+    "Invoice_Date":   ["What is the invoice date?", "What is the date of the invoice?"],
+    "Due_Date":       ["What is the due date?", "What is the payment due date?"],
+    "Issuer_Name":    ["What is the name of the company issuing this invoice?", "Who issued this invoice?"],
+    "Client_Name":    ["What is the name of the client or customer?", "Who is billed?"],
+    "Total":          ["What is the total amount due?", "What is the total?"],
 }
 
 # Minimum score threshold below which an answer is discarded

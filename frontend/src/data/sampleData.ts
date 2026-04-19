@@ -137,7 +137,7 @@ export const pipelineSteps: PipelineStep[] = [
   {
     id: 'extraction',
     title: 'Invoice Field Extraction',
-    description: 'Invoices flow through image preprocessing and LayoutLM document-QA to recover 16 structured fields.',
+    description: 'Invoices flow through image preprocessing and LayoutLM document-QA to recover 6 structured fields.',
     techniques: ['CLAHE preprocessing', 'LayoutLMv2', 'Document QA'],
     icon: 'NER',
     status: 'complete',
@@ -153,17 +153,17 @@ export const sampleMetrics: MetricCard[] = [
     color: 'var(--color-accent-indigo)',
   },
   {
-    label: 'Held-out Samples',
-    value: 2000,
+    label: 'Samples per Class',
+    value: 200,
     suffix: '',
-    description: 'Balanced RVL-CDIP validation set (500 per category) — never seen during training.',
+    description: 'Approximate balanced count per category in the RVL-CDIP small-200 subset, pre-split into training and held-out validation folds.',
     color: 'var(--color-accent-blue)',
   },
   {
     label: 'Invoice Fields Recovered',
-    value: 16,
+    value: 6,
     suffix: '',
-    description: 'Structured fields extracted per invoice by LayoutLM document-QA (invoice number, dates, issuer, recipient, totals, line items, tax, discount, addresses).',
+    description: 'Structured fields extracted per invoice by LayoutLM document-QA: invoice number, invoice date, due date, issuer name, recipient name, total amount.',
     color: 'var(--color-accent-emerald)',
   },
   {

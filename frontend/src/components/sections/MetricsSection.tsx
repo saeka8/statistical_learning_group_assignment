@@ -61,8 +61,8 @@ export function MetricsSection() {
             </div>
             <div className={styles.miniDivider} aria-hidden="true" />
             <div className={styles.miniStat}>
-              <span className={styles.miniValue}>8,000</span>
-              <span className={styles.miniLabel}>Training Samples</span>
+              <span className={styles.miniValue}>~200</span>
+              <span className={styles.miniLabel}>Samples per Class</span>
             </div>
             <div className={styles.miniDivider} aria-hidden="true" />
             <div className={styles.miniStat}>

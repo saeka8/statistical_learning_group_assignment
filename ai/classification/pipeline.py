@@ -1,19 +1,17 @@
 """
-Document Classification and Invoice Information Extraction Pipeline
-===================================================================
-IE University — Statistical Learning and Prediction — Group Project
+Legacy standalone classification pipeline (DEPRECATED — not used by the web app).
+==================================================================================
+This file predates the current web application architecture. The deployed
+production pipeline lives in:
+  - backend/ml/classifier.py  (loads improved_classifier.pkl, soft-voting ensemble)
+  - backend/ml/extractor.py   (LayoutLMv2 document-QA)
 
-End-to-end system that:
-1. Takes a document image as input
-2. Extracts text via OCR (Tesseract)
-3. Extracts visual/layout features
-4. Classifies into one of 4 categories using a hybrid Random Forest model
-5. If classified as an invoice, extracts structured fields via regex/rules
+This script's path constants (PROJECT_DIR/models, PROJECT_DIR/processed_data)
+point to directories that no longer exist; it is retained only as a reference
+artefact. Do not use.
 
-Usage:
-    python pipeline.py <image_path>
-    python pipeline.py --demo          # Run demo on sample images
-    python pipeline.py --evaluate      # Run full evaluation on test set
+If you need a standalone classifier demo, use:
+  ai/classification/model_training/4_improved_ensemble.py
 """
 
 import sys
