@@ -1,6 +1,6 @@
 import { AnimatePresence, motion } from 'motion/react';
 import { useEffect, useRef, useState } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Button } from '../common/Button';
 import { AuthDialog, type AuthMode } from './AuthDialog';
 import { useAuth } from '../../hooks/useAuth';
@@ -82,6 +82,19 @@ export function Navbar() {
     setMenuOpen(false);
   };
 
+  // Listen for login requests from other parts of the app (e.g. UploadWorkspace CTA)
+  useEffect(() => {
+    const handler = () => openAuth('login');
+    window.addEventListener('doclens:open-login', handler);
+    return () => window.removeEventListener('doclens:open-login', handler);
+  }, []);
+
+  // Route-aware nav button: shows "Workspace" on the landing page and
+  // "Home page" on the workspace page — placed to the left of the profile.
+  const isOnWorkspace = location.pathname === '/workspace';
+  const contextButtonLabel = isOnWorkspace ? 'Home page' : 'Workspace';
+  const contextButtonPath = isOnWorkspace ? '/' : '/workspace';
+
   return (
     <nav
       className={`${styles.navbar} ${scrolled ? styles.scrolled : ''}`}
@@ -103,6 +116,17 @@ export function Navbar() {
         </a>
 
         <div className={styles.trailing}>
+          {user && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className={styles.navButton}
+              onClick={() => navigate(contextButtonPath)}
+            >
+              {contextButtonLabel}
+            </Button>
+          )}
           {user ? (
             <div className={styles.accountWrap} ref={accountMenuRef}>
               <button
@@ -136,15 +160,6 @@ export function Navbar() {
                     <div className={styles.menuHeader}>
                       <p className={styles.menuName}>{user.displayName}</p>
                       <p className={styles.menuEmail}>{user.email}</p>
-                    </div>
-                    <div className={styles.menuActions}>
-                      <Link
-                        to="/workspace"
-                        className={styles.menuLink}
-                        onClick={() => setMenuOpen(false)}
-                      >
-                        Workspace
-                      </Link>
                     </div>
                     <button
                       type="button"

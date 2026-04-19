@@ -10,6 +10,7 @@ import {
 import { AnimatePresence, motion } from 'motion/react';
 import { sampleDocuments } from '../../data/sampleData';
 import { usePrefersReducedMotion } from '../../hooks/usePrefersReducedMotion';
+import { useAuth } from '../../hooks/useAuth';
 import type { AnalysisPhase, UploadedDocument } from '../../types';
 import { formatFileSize } from '../../utils/helpers';
 import { Badge } from '../common/Badge';
@@ -78,6 +79,7 @@ export function UploadWorkspace({
   onReset,
   onSetActive,
 }: UploadWorkspaceProps) {
+  const { user } = useAuth();
   const [isDragging, setIsDragging] = useState(false);
   const [isPasteFocused, setIsPasteFocused] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -204,6 +206,7 @@ export function UploadWorkspace({
           <div className={styles.workspaceGrid}>
             <div className={styles.uploadCol}>
               <Card variant="glass" padding="lg">
+                {user ? (
                 <div
                   className={`${styles.dropzone} ${isDragging ? styles.dropzoneActive : ''} ${isPasteFocused ? styles.dropzoneFocused : ''}`}
                   onDragEnter={handleDragEnter}
@@ -274,6 +277,43 @@ export function UploadWorkspace({
                     {isPasteFocused ? 'Paste screenshot ready' : 'Paste works while this area is focused'}
                   </p>
                 </div>
+                ) : (
+                  <div className={styles.dropzone} style={{ cursor: 'default' }}>
+                    <div className={styles.dropzoneIcon} aria-hidden="true">
+                      <svg width="52" height="52" viewBox="0 0 52 52" fill="none">
+                        <rect
+                          x="14"
+                          y="22"
+                          width="24"
+                          height="20"
+                          rx="3"
+                          fill="rgba(22, 147, 198, 0.08)"
+                          stroke="var(--color-accent-indigo)"
+                          strokeWidth="1.5"
+                        />
+                        <path
+                          d="M18 22v-4a8 8 0 0 1 16 0v4"
+                          stroke="var(--color-accent-amber)"
+                          strokeWidth="1.8"
+                        />
+                        <circle cx="26" cy="31" r="2" fill="var(--color-accent-indigo)" />
+                      </svg>
+                    </div>
+                    <p className={styles.dropzoneTitle}>Sign in to upload documents</p>
+                    <p className={styles.dropzoneHint}>
+                      Log in or create a free account to run the model on your own files.
+                    </p>
+                    <div style={{ marginTop: '0.75rem' }}>
+                      <Button
+                        variant="primary"
+                        size="md"
+                        onClick={() => window.dispatchEvent(new Event('doclens:open-login'))}
+                      >
+                        Log in or sign up
+                      </Button>
+                    </div>
+                  </div>
+                )}
 
                 <div className={styles.samples}>
                   <p className={styles.samplesLabel}>Or start with a sample document:</p>
@@ -291,6 +331,15 @@ export function UploadWorkspace({
                       </button>
                     ))}
                   </div>
+                  <p
+                    style={{
+                      marginTop: '0.75rem',
+                      fontSize: '0.75rem',
+                      opacity: 0.65,
+                    }}
+                  >
+                    Samples display pre-computed results for the demo — the model is not re-run on them.
+                  </p>
                 </div>
               </Card>
             </div>
